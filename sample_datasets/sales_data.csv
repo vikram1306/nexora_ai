@@ -1,0 +1,16 @@
+transaction_id,date,region,product_category,sales_rep,deal_stage,sales_amount,units_sold
+TX-1001,2026-01-05,North,Enterprise AI Suite,Sarah Jenkins,Closed Won,125000,5
+TX-1002,2026-01-08,South,Cloud Analytics,Michael Chang,Closed Won,45000,3
+TX-1003,2026-01-12,North,Data Pipeline Tool,Sarah Jenkins,Closed Won,89000,10
+TX-1004,2026-01-15,East,Enterprise AI Suite,David Ross,Closed Won,210000,8
+TX-1005,2026-01-20,West,Cloud Analytics,Elena Rostova,Closed Won,62000,4
+TX-1006,2026-02-02,North,Enterprise AI Suite,Sarah Jenkins,Closed Won,310000,12
+TX-1007,2026-02-10,South,Data Pipeline Tool,Michael Chang,Closed Won,55000,6
+TX-1008,2026-02-14,East,Cloud Analytics,David Ross,Closed Won,78000,5
+TX-1009,2026-02-22,North,Enterprise AI Suite,Sarah Jenkins,Closed Won,450000,18
+TX-1010,2026-03-01,West,Enterprise AI Suite,Elena Rostova,Closed Won,180000,7
+TX-1011,2026-03-10,North,Cloud Analytics,Sarah Jenkins,Closed Won,95000,6
+TX-1012,2026-03-18,East,Data Pipeline Tool,David Ross,Closed Won,115000,12
+TX-1013,2026-04-05,South,Enterprise AI Suite,Michael Chang,Closed Won,275000,10
+TX-1014,2026-04-12,North,Enterprise AI Suite,Sarah Jenkins,Closed Won,520000,20
+TX-1015,2026-04-25,West,Data Pipeline Tool,Elena Rostova,Closed Won,84000,9

@@ -1,0 +1,11 @@
+order_id,warehouse_location,shipping_carrier,units_shipped,fulfillment_delay_days,logistics_cost,on_time_status
+ORD-501,North Hub,FedEx Express,5,0.8,420,On Time
+ORD-502,East Hub,UPS Ground,8,1.2,650,On Time
+ORD-503,West Hub,DHL Express,4,0.5,380,On Time
+ORD-504,North Hub,FedEx Express,12,3.8,1250,Delayed
+ORD-505,South Hub,UPS Ground,6,1.0,520,On Time
+ORD-506,North Hub,DHL Express,18,4.2,1850,Delayed
+ORD-507,East Hub,FedEx Express,5,0.9,460,On Time
+ORD-508,West Hub,UPS Ground,7,1.1,580,On Time
+ORD-509,North Hub,FedEx Express,20,4.5,2100,Delayed
+ORD-510,South Hub,DHL Express,10,1.4,890,On Time

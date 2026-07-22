@@ -1,0 +1,9 @@
+campaign_id,campaign_name,channel,impressions,clicks,mql_leads,ad_spend,roas
+MKT-401,Q1 Enterprise AI Launch,LinkedIn Ads,450000,12500,480,55000,4.2
+MKT-402,Q1 Search Intent,Google Search,890000,34000,920,42000,3.8
+MKT-403,Retargeting Banner,Meta Ads,1200000,18000,210,38000,1.9
+MKT-404,Executive Newsletter,Email Marketing,85000,8900,340,12000,6.5
+MKT-405,Q2 Cloud Analytics Push,LinkedIn Ads,520000,14800,560,68000,4.5
+MKT-406,Q2 High Intent Search,Google Search,950000,38500,1050,48000,3.9
+MKT-407,Meta Retargeting V2,Meta Ads,1400000,19500,230,45000,1.8
+MKT-408,ABM Enterprise Outreach,LinkedIn Ads,380000,11200,620,75000,5.1

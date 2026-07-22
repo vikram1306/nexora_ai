@@ -1,0 +1,46 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Environments & Dependencies
+venv/
+env/
+.venv/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.next/
+frontend/build/
+
+# Testing & Cache
+.pytest_cache/
+.coverage
+
+# Configuration & Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!.env.example
+
+# Databases, Uploads & Vector DBs
+*.db
+*.sqlite
+*.sqlite3
+nexora.db
+chroma_db/
+data_uploads/
+backend/data_uploads/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

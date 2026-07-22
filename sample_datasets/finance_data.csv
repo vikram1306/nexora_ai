@@ -1,0 +1,15 @@
+record_id,month,department,cost_center,expense_category,budget_allocated,actual_expense,ebitda_contribution
+FIN-201,2026-01,Sales,CC-101,Travel & Client Meetings,50000,42000,830000
+FIN-202,2026-01,Marketing,CC-102,Digital Ads & Events,120000,115000,-115000
+FIN-203,2026-01,Engineering,CC-103,Cloud Compute & Infrastructure,180000,175000,-175000
+FIN-204,2026-01,Operations,CC-104,Warehouse Logistics,65000,68000,-68000
+FIN-205,2026-02,Sales,CC-101,Commission & Bonuses,90000,95000,910000
+FIN-206,2026-02,Marketing,CC-102,Paid Acquisition,130000,142000,-142000
+FIN-207,2026-02,Engineering,CC-103,SaaS Licensing,45000,43000,-43000
+FIN-208,2026-02,HR,CC-105,Recruiting & Training,35000,31000,-31000
+FIN-209,2026-03,Sales,CC-101,Enterprise Operations,55000,52000,1120000
+FIN-210,2026-03,Marketing,CC-102,Campaign Spend,140000,158000,-158000
+FIN-211,2026-03,Operations,CC-104,Inventory Storage,70000,74000,-74000
+FIN-212,2026-04,Sales,CC-101,Executive Growth,110000,105000,1480000
+FIN-213,2026-04,Marketing,CC-102,LinkedIn & Search,150000,145000,-145000
+FIN-214,2026-04,Engineering,CC-103,R&D Infrastructure,200000,192000,-192000

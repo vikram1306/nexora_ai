@@ -1,0 +1,13 @@
+employee_id,name,department,role,hire_date,annual_salary,performance_rating,status
+EMP-301,Alexander Wright,Sales,VP of Global Sales,2022-03-15,220000,4.9,Active
+EMP-302,Sarah Jenkins,Sales,Senior Enterprise Rep,2023-01-10,145000,4.8,Active
+EMP-303,Michael Chang,Sales,Account Executive,2023-06-01,115000,4.2,Active
+EMP-304,David Ross,Sales,Enterprise Director,2022-09-01,165000,4.6,Active
+EMP-305,Elena Rostova,Sales,Regional Lead,2023-04-12,135000,4.5,Active
+EMP-306,Marcus Vance,Finance,CFO,2021-11-01,240000,4.9,Active
+EMP-307,Jessica Lin,Finance,Financial Controller,2022-08-15,130000,4.7,Active
+EMP-308,David Kim,Engineering,VP of Engineering,2022-01-10,230000,4.8,Active
+EMP-309,Rachel Adams,Marketing,CMO,2022-05-20,210000,4.7,Active
+EMP-3010,Brian Taylor,Marketing,Growth Marketing Lead,2023-02-15,125000,4.4,Active
+EMP-311,Samantha Reed,Operations,VP of Logistics,2022-04-01,195000,4.6,Active
+EMP-312,Carlos Gomez,Operations,Warehouse Manager,2023-07-10,95000,4.3,Active
