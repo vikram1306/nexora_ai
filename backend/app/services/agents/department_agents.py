@@ -1,3 +1,4 @@
+import re
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, List
@@ -58,7 +59,7 @@ def apply_natural_language_date_filter(df: pd.DataFrame, date_col: str, prompt: 
 
         # 5. Named Month Matching (e.g. "february", "march", "april")
         for m_name, m_num in MONTH_MAP.items():
-            if m_name in prompt_lower:
+            if re.search(rf"\b{m_name}\b", prompt_lower):
                 matched_periods = [m for m in all_months if m.endswith(f"-{m_num}")]
                 if matched_periods:
                     return df_valid[df_valid['month_str'].isin(matched_periods)], matched_periods
@@ -212,7 +213,7 @@ class FinanceAgent(BaseDepartmentAgent):
                 total_rev = float(sales_df['sales_amount'].sum()) if (sales_df is not None and 'sales_amount' in sales_df.columns) else 2693000.0
                 net_ebitda = total_rev - total_exp
                 ebitda_margin = (net_ebitda / total_rev) * 100
-                insights.append(f"**Cross-Departmental Net EBITDA Analysis**: Comparing Total Sales Revenue (${total_rev:,.2f}) against Operating Expenditure (${total_exp:,.2f}) yields **$1,256,000.00 Net EBITDA** (Net EBITDA Margin: **{ebitda_margin:.2f}%**).")
+                insights.append(f"**Cross-Departmental Net EBITDA Analysis**: Comparing Total Sales Revenue (${total_rev:,.2f}) against Operating Expenditure (${total_exp:,.2f}) yields **${net_ebitda:,.2f} Net EBITDA** (Net EBITDA Margin: **{ebitda_margin:.2f}%**).")
             
             period_label = f" for requested period ({', '.join(target_periods)})" if target_periods else ""
             insights.append(f"Financial operating expenditure stands at ${total_exp:,.2f}{period_label}.")
@@ -283,9 +284,21 @@ class MarketingAgent(BaseDepartmentAgent):
 
     def _analyze_data(self, df: pd.DataFrame, prompt: str, evidence: List[str]) -> DepartmentAgentOutput:
         num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-        spend_col = next((c for c in num_cols if "spend" in c or "budget" in c or "cost" in c or "ad" in c), num_cols[0] if num_cols else None)
+        # Prefer exact spend names, or word-boundary match (preventing 'ad' from matching 'mql_leads')
+        spend_col = next((c for c in num_cols if c in ["ad_spend", "spend", "marketing_spend", "budget", "cost"]), None)
+        if not spend_col:
+            spend_col = next((c for c in num_cols if re.search(r"\b(ad_spend|spend|budget|cost)\b", c)), None)
+        if not spend_col:
+            spend_col = num_cols[0] if num_cols else None
+
         roas_col = next((c for c in num_cols if "roas" in c or "roi" in c or "return" in c), None)
-        leads_col = next((c for c in num_cols if "lead" in c or "mql" in c or "click" in c), None)
+
+        # Prefer exact lead names (excluding click/spend)
+        leads_col = next((c for c in num_cols if c in ["mql_leads", "leads", "mql", "conversions", "lead_count"]), None)
+        if not leads_col:
+            leads_col = next((c for c in num_cols if ("lead" in c or "mql" in c) and "spend" not in c), None)
+        if not leads_col:
+            leads_col = next((c for c in num_cols if "click" in c), None)
 
         metrics = []
         insights = []

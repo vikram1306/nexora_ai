@@ -1,3 +1,4 @@
+import re
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, List
@@ -99,7 +100,9 @@ class DataProfiler:
                 kpis["primary_metric"] = "avg_salary"
                 kpis["avg_salary"] = round(float(df[sal_cols[0]].mean()), 2)
         elif department == "marketing":
-            cac_cols = [c for c in numeric_cols if "cac" in c or "ad" in c or "spend" in c]
+            cac_cols = [c for c in numeric_cols if c in ["ad_spend", "spend", "marketing_spend", "budget", "cost", "cac"]]
+            if not cac_cols:
+                cac_cols = [c for c in numeric_cols if re.search(r"\b(ad_spend|spend|budget|cost|cac)\b", c)]
             if cac_cols:
                 kpis["primary_metric"] = "total_marketing_spend"
                 kpis["total_marketing_spend"] = round(float(df[cac_cols[0]].sum()), 2)

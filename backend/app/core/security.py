@@ -2,7 +2,10 @@ from datetime import datetime, timedelta
 from typing import Any, Union, Optional
 import hashlib
 import hmac
-import jwt
+try:
+    from jose import jwt
+except ImportError:
+    import jwt
 from app.core.config import settings
 
 def hash_password(password: str) -> str:

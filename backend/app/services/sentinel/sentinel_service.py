@@ -17,23 +17,33 @@ class SentinelAIService:
         alerts_created = []
         datasets = self.db.query(Dataset).filter(Dataset.tenant_id == self.tenant_id).all()
 
+        def is_id_column(col_name: str) -> bool:
+            name = col_name.lower()
+            return (
+                name == "id" or name.endswith("_id") or name.startswith("id_") or
+                "zip" in name or "year" in name or "code" in name or "index" in name or
+                "phone" in name or "number" in name or "month_num" in name
+            )
+
         for ds in datasets:
             df = self.memory.query_department_dataframe(ds.department)
-            if df is None or len(df) < 3:
+            if df is None or len(df) < 5:
                 continue
 
             num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-            for col in num_cols[:3]:
+            feature_cols = [c for c in num_cols if not is_id_column(c)]
+
+            for col in feature_cols[:3]:
                 col_data = df[col].values
-                mean_val = np.mean(col_data)
-                std_val = np.std(col_data)
+                mean_val = float(np.mean(col_data))
+                std_val = float(np.std(col_data, ddof=1)) if len(col_data) > 1 else 0.0
 
                 if std_val == 0:
                     continue
 
-                # Z-Score Anomaly detection
+                # Z-Score Anomaly detection (threshold >= 2.2 for sample robust detection)
                 z_scores = np.abs((col_data - mean_val) / std_val)
-                anomaly_indices = np.where(z_scores > 2.0)[0]
+                anomaly_indices = np.where(z_scores >= 2.2)[0]
 
                 if len(anomaly_indices) > 0:
                     max_idx = anomaly_indices[0]

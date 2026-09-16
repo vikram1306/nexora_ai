@@ -1,5 +1,7 @@
 import concurrent.futures
 import httpx
+import pandas as pd
+import numpy as np
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
@@ -69,8 +71,8 @@ class PlannerAgent:
         )
 
     def _execute_agent_threadsafe(self, dept_name: str, prompt: str) -> DepartmentAgentOutput:
-        """Helper to execute department agent in its own thread-safe database session."""
-        db_thread = SessionLocal()
+        """Helper to execute department agent in its database session."""
+        db_thread = self.db if self.db is not None else SessionLocal()
         try:
             memory_thread = EnterpriseMemoryManager(db_thread, self.tenant_id)
             agent_map = {
@@ -83,7 +85,8 @@ class PlannerAgent:
             agent = agent_map[dept_name]
             return agent.execute(prompt)
         finally:
-            db_thread.close()
+            if db_thread != self.db:
+                db_thread.close()
 
     def execute_query(self, prompt: str) -> ExecutiveQueryResponse:
         plan = self.analyze_intent_and_plan(prompt)
@@ -197,30 +200,77 @@ class PlannerAgent:
         finance_out = next((d for d in department_outputs if d.department == "finance"), None)
 
         if has_ebitda_keywords and sales_out and finance_out:
-            total_rev = 2693000.0
-            total_exp = 1437000.0
+            total_rev = None
+            total_exp = None
 
+            # Get revenue from sales output metrics
             if sales_out and sales_out.metrics:
-                for m in sales_out.metrics:
-                    if m.value and m.value > 0:
-                        total_rev = m.value
-                        break
+                rev_m = next((m for m in sales_out.metrics if "Revenue" in m.name or "Sales" in m.name), sales_out.metrics[0])
+                if rev_m and rev_m.value:
+                    total_rev = float(rev_m.value)
 
+            # Get expenses from finance output metrics
             if finance_out and finance_out.metrics:
-                for m in finance_out.metrics:
-                    if m.value and m.value > 0:
-                        total_exp = m.value
-                        break
+                exp_m = next((m for m in finance_out.metrics if "Expense" in m.name or "Cost" in m.name), finance_out.metrics[0])
+                if exp_m and exp_m.value:
+                    total_exp = float(exp_m.value)
 
-            net_ebitda = total_rev - total_exp
-            margin_pct = (net_ebitda / total_rev) * 100
-            return (
-                f"### FINANCIAL & EBITDA OVERVIEW\n"
-                f"• **Total Sales Revenue**: ${total_rev:,.2f}\n"
-                f"• **Total Operating Expenditure**: ${total_exp:,.2f}\n"
-                f"• **Net EBITDA**: **${net_ebitda:,.2f}** (Net EBITDA Margin: **{margin_pct:.2f}%**)\n"
-                f"• **Expense Spike Analysis**: Q2 2026-04 expenditure spiked to $442,000.00 (+55.6% MoM) due to Cloud Infrastructure scaling."
-            )
+            # Fallback to direct dataframe query if metrics missed them
+            if total_rev is None:
+                sales_df = self.memory.query_department_dataframe("sales")
+                if sales_df is not None and not sales_df.empty:
+                    rev_col = next((c for c in sales_df.select_dtypes(include=[np.number]).columns if "amount" in c or "sales" in c or "rev" in c), None)
+                    if rev_col:
+                        total_rev = float(sales_df[rev_col].sum())
+
+            if total_exp is None:
+                fin_df = self.memory.query_department_dataframe("finance")
+                if fin_df is not None and not fin_df.empty:
+                    exp_col = next((c for c in fin_df.select_dtypes(include=[np.number]).columns if "exp" in c or "cost" in c or "spend" in c), None)
+                    if exp_col:
+                        total_exp = float(fin_df[exp_col].sum())
+
+            if total_rev is not None and total_exp is not None and total_rev > 0:
+                net_ebitda = total_rev - total_exp
+                margin_pct = (net_ebitda / total_rev) * 100
+
+                # Dynamic Expense Spike Analysis from Finance time series
+                spike_line = ""
+                fin_df = self.memory.query_department_dataframe("finance")
+                if fin_df is not None and not fin_df.empty:
+                    date_col = next((c for c in fin_df.columns if "month" in c or "date" in c or "period" in c), None)
+                    exp_col = next((c for c in fin_df.select_dtypes(include=[np.number]).columns if "exp" in c or "cost" in c or "spend" in c), None)
+                    if date_col and exp_col:
+                        try:
+                            fin_df['parsed_d'] = pd.to_datetime(fin_df[date_col], errors='coerce')
+                            valid_fin = fin_df.dropna(subset=['parsed_d']).sort_values('parsed_d')
+                            monthly = valid_fin.groupby(valid_fin[date_col])[exp_col].sum()
+                            if len(monthly) >= 2:
+                                max_pct = -999.0
+                                max_period = None
+                                max_val = 0.0
+                                periods = list(monthly.index)
+                                for i in range(1, len(periods)):
+                                    p_prev, p_curr = periods[i-1], periods[i]
+                                    v_prev, v_curr = float(monthly[p_prev]), float(monthly[p_curr])
+                                    if v_prev > 0:
+                                        pct = ((v_curr - v_prev) / v_prev) * 100
+                                        if pct > max_pct:
+                                            max_pct = pct
+                                            max_period = p_curr
+                                            max_val = v_curr
+                                if max_period and max_pct > 0:
+                                    spike_line = f"\n• **Expense Spike Analysis**: Period {max_period} expenditure increased to ${max_val:,.2f} (+{max_pct:.1f}% MoM)."
+                        except Exception:
+                            pass
+
+                return (
+                    f"### FINANCIAL & EBITDA OVERVIEW\n"
+                    f"• **Total Sales Revenue**: ${total_rev:,.2f}\n"
+                    f"• **Total Operating Expenditure**: ${total_exp:,.2f}\n"
+                    f"• **Net EBITDA**: **${net_ebitda:,.2f}** (Net EBITDA Margin: **{margin_pct:.2f}%**)"
+                    f"{spike_line}"
+                )
         return None
 
     def _build_chart_config(self, department_outputs: List[DepartmentAgentOutput]) -> Dict[str, Any]:

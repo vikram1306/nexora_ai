@@ -243,7 +243,7 @@ export default function LandingPage() {
           <div className="p-8 rounded-2xl glass-panel border border-white/10 space-y-4">
             <h3 className="text-2xl font-serif font-bold text-accent-rose">Statistical Z-Score Engine</h3>
             <p className="text-neutral-300 font-light text-sm leading-relaxed">
-              Sentinel AI continuously reads ingested company metrics and calculates standard deviation bounds ($Z > 2.5\sigma$). 
+              Sentinel AI continuously reads ingested company metrics and calculates standard deviation bounds ($Z &gt; 2.5\sigma$). 
               When a metric deviates unexpectedly, it automatically conducts a root-cause diagnosis.
             </p>
             <div className="space-y-2 text-xs font-mono text-neutral-400 pt-2">
