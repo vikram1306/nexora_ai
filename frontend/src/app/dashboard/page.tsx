@@ -185,7 +185,7 @@ export default function ExecutiveDashboard() {
         setApiError(errData.detail || 'Failed to upload CSV file.');
       }
     } catch (err: any) {
-      setApiError(`Could not connect to backend server at ${getApiUrl()}. Make sure your backend server is running on port 8080.`);
+      setApiError(`Could not connect to backend server at ${getApiUrl()}. Make sure your backend server is running on port 8000.`);
     } finally {
       setIsUploading(false);
     }

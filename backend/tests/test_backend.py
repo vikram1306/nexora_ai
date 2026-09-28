@@ -5,29 +5,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import pytest
 import pandas as pd
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+
 from app.main import app
-from app.core.database import Base, get_db
 from app.core.security import hash_password, verify_password
 from app.services.ingestion.profiler import DataProfiler
 
-# Setup Test DB
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test_nexora.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-Base.metadata.drop_all(bind=engine)
-Base.metadata.create_all(bind=engine)
-
-def override_get_db():
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 def test_password_security():
@@ -65,55 +47,54 @@ def test_auth_flow():
 
 def test_data_profiler_and_ingestion(tmp_path):
     # Create sample CSV
-    csv_file = tmp_path / "sales_test.csv"
+    csv_file = tmp_path / "sales_data.csv"
     df = pd.DataFrame({
-        "transaction_id": [101, 102, 103, 104, 105],
-        "sales_amount": [1200.0, 4500.0, 3100.0, 8900.0, 25000.0],
-        "region": ["North", "South", "North", "East", "West"]
+        "transaction_id": ["T001", "T002", "T003"],
+        "sales_amount": [15000.0, 25000.0, 10000.0],
+        "region": ["North", "South", "East"],
+        "date": ["2026-01-01", "2026-01-02", "2026-01-03"]
     })
     df.to_csv(csv_file, index=False)
 
-    profile = DataProfiler.profile_csv(str(csv_file), "sales")
-    assert profile["row_count"] == 5
-    assert profile["kpis_extracted"]["total_revenue"] == 42700.0
+    # Test Profiler
+    schema_info = DataProfiler.profile_csv(str(csv_file), "sales")
+    assert schema_info["row_count"] == 3
+    assert len(schema_info["columns_metadata"]) == 4
+    assert schema_info["kpis_extracted"]["total_revenue"] == 50000.0
 
 def test_out_of_domain_query():
-    reg = client.post("/api/v1/auth/register", json={
-        "company_name": "Test Enterprise",
-        "email": "admin@test.com",
-        "password": "Password123!",
-        "full_name": "Admin User",
-        "role": "CEO"
-    })
-    token = reg.json()["access_token"]
-
-    res = client.post("/api/v1/query/execute", json={"prompt": "Who won the political election?"}, headers={"Authorization": f"Bearer {token}"})
-    assert res.status_code == 200
-    json_data = res.json()
-    assert json_data["is_out_of_domain"] is True
-    assert json_data["intent"] == "OUT_OF_DOMAIN"
-
-def test_valid_executive_query():
-    reg = client.post("/api/v1/auth/register", json={
-        "company_name": "OmniCorp",
+    reg_res = client.post("/api/v1/auth/register", json={
+        "company_name": "OmniCorp Inc",
         "email": "exec@omnicorp.com",
         "password": "Password123!",
-        "full_name": "Exec Officer",
+        "full_name": "Executive Smith",
         "role": "CEO"
     })
-    token = reg.json()["access_token"]
+    token = reg_res.json()["access_token"]
 
-    res = client.post("/api/v1/query/execute", json={"prompt": "Provide sales revenue and financial profit summary"}, headers={"Authorization": f"Bearer {token}"})
+    res = client.post("/api/v1/query/execute", json={
+        "prompt": "What is the weather forecast today in Tokyo?"
+    }, headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["is_out_of_domain"] is True
+    assert "non-business topic" in data["executive_summary"]
+
+def test_valid_executive_query():
+    reg_res = client.post("/api/v1/auth/register", json={
+        "company_name": "Stark Industries",
+        "email": "tony@stark.com",
+        "password": "Password123!",
+        "full_name": "Tony Stark",
+        "role": "CEO"
+    })
+    token = reg_res.json()["access_token"]
+
+    res = client.post("/api/v1/query/execute", json={
+        "prompt": "Analyze sales revenue performance and regional deal growth"
+    }, headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 200
     data = res.json()
     assert data["is_out_of_domain"] is False
+    assert data["confidence_score"] > 0
     assert len(data["department_outputs"]) > 0
-    assert data["confidence_score"] > 0.0
-
-def teardown_module():
-    engine.dispose()
-    if os.path.exists("./test_nexora.db"):
-        try:
-            os.remove("./test_nexora.db")
-        except Exception:
-            pass

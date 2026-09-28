@@ -21,6 +21,29 @@ def execute_executive_query(
     planner = PlannerAgent(db, current_user.tenant_id)
     return planner.execute_query(request.prompt)
 
+@router.post("/export-pdf")
+def export_executive_pdf(
+    request: ExecutiveQueryRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Executes query and streams back a formatted PDF executive intelligence report."""
+    from fastapi.responses import Response
+    from app.services.pdf_exporter import generate_executive_pdf_bytes
+
+    if not request.prompt.strip():
+        raise HTTPException(status_code=400, detail="Query prompt cannot be empty")
+
+    planner = PlannerAgent(db, current_user.tenant_id)
+    query_res = planner.execute_query(request.prompt)
+    pdf_bytes = generate_executive_pdf_bytes(query_res)
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=Nexora_Executive_Report.pdf"}
+    )
+
 @router.get("/ollama-status")
 def check_ollama_status():
     """Check if local Ollama (Llama 3) service is active on host machine."""

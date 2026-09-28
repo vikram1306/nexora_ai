@@ -5,11 +5,19 @@ from app.core.config import settings
 # Handles both PostgreSQL and SQLite fallback cleanly
 connect_args = {"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
 
-engine = create_engine(
-    settings.DATABASE_URL,
-    connect_args=connect_args,
-    pool_pre_ping=True
-)
+if settings.DATABASE_URL.startswith("sqlite") and ":memory:" in settings.DATABASE_URL:
+    from sqlalchemy.pool import StaticPool
+    engine = create_engine(
+        settings.DATABASE_URL,
+        connect_args=connect_args,
+        poolclass=StaticPool
+    )
+else:
+    engine = create_engine(
+        settings.DATABASE_URL,
+        connect_args=connect_args,
+        pool_pre_ping=True
+    )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

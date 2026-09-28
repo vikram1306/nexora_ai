@@ -12,19 +12,11 @@ class EnterpriseMemoryManager:
         self.tenant_id = tenant_id
 
     def get_department_datasets(self, department: str) -> List[Dataset]:
-        # Query datasets for current tenant
-        datasets = self.db.query(Dataset).filter(
+        # Query datasets strictly bound to current tenant ID
+        return self.db.query(Dataset).filter(
             Dataset.tenant_id == self.tenant_id,
             Dataset.department == department
         ).all()
-
-        # Resilient Fallback: If no dataset bound to current tenant ID, retrieve active uploaded dataset for department
-        if not datasets:
-            datasets = self.db.query(Dataset).filter(
-                Dataset.department == department
-            ).order_by(Dataset.created_at.desc()).all()
-
-        return datasets
 
     def query_department_dataframe(self, department: str) -> Optional[pd.DataFrame]:
         datasets = self.get_department_datasets(department)
@@ -53,7 +45,10 @@ class EnterpriseMemoryManager:
         )
 
     def get_tenant_kpi_summary(self) -> Dict[str, Any]:
-        datasets = self.db.query(Dataset).filter(Dataset.department.isnot(None)).all()
+        datasets = self.db.query(Dataset).filter(
+            Dataset.tenant_id == self.tenant_id,
+            Dataset.department.isnot(None)
+        ).all()
         summary = {}
         for ds in datasets:
             if ds.schema_info and ds.schema_info.kpis_extracted:

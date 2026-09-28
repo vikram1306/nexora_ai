@@ -15,19 +15,15 @@ from app.services.agents.planner import PlannerAgent
 from app.services.sentinel.sentinel_service import SentinelAIService
 from app.models.domain import Dataset, SentinelAlert
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+from tests.conftest import TestingSessionLocal
 
 @pytest.fixture
 def db_session():
-    Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
     try:
         yield db
     finally:
         db.close()
-        Base.metadata.drop_all(bind=engine)
 
 def save_test_dataset(db, tmp_path, tenant_id, department, df, name="test.csv"):
     csv_file = tmp_path / name
@@ -146,3 +142,65 @@ def test_planner_ebitda_and_spike_analysis(tmp_path):
     assert "2026-02" in res.executive_summary
     db.close()
     test_engine.dispose()
+
+def test_regression_ebitda_output_changes_with_input_data(db_session, tmp_path):
+    """Regression Test 1: Assert EBITDA changes dynamically when input dataset changes, and is omitted if Sales dataset is missing."""
+    tenant_id = "test_dynamic_change_tenant"
+
+    fin_df = pd.DataFrame({
+        "month": ["2026-01"],
+        "actual_expense": [300000.0]
+    })
+    save_test_dataset(db_session, tmp_path, tenant_id, "finance", fin_df, "finance.csv")
+    memory = EnterpriseMemoryManager(db_session, tenant_id)
+    finance_agent = FinanceAgent(memory)
+
+    # Case A: Missing Sales dataset -> EBITDA insight must NOT be generated (no hardcoded fallback)
+    output_no_sales = finance_agent.execute("Calculate Net EBITDA margin")
+    ebitda_insight_none = next((i for i in output_no_sales.insights if "Net EBITDA Analysis" in i), None)
+    assert ebitda_insight_none is None
+
+    # Case B: Add Sales = 1,000,000 -> EBITDA must equal $700,000 (70%)
+    tenant_id_b = "test_ebitda_tenant_b"
+    save_test_dataset(db_session, tmp_path, tenant_id_b, "finance", fin_df, "finance.csv")
+    sales_df1 = pd.DataFrame({"sales_amount": [1000000.0]})
+    save_test_dataset(db_session, tmp_path, tenant_id_b, "sales", sales_df1, "sales1.csv")
+    mem_b = EnterpriseMemoryManager(db_session, tenant_id_b)
+    output1 = FinanceAgent(mem_b).execute("Calculate Net EBITDA margin")
+    ebitda_insight1 = next((i for i in output1.insights if "Net EBITDA Analysis" in i), "")
+    assert "$700,000.00 Net EBITDA" in ebitda_insight1
+    assert "70.00%" in ebitda_insight1
+
+    # Case C: Change Sales = 2,500,000 -> EBITDA must dynamically change to $2,200,000 (88%)
+    tenant_id_c = "test_ebitda_tenant_c"
+    save_test_dataset(db_session, tmp_path, tenant_id_c, "finance", fin_df, "finance.csv")
+    sales_df2 = pd.DataFrame({"sales_amount": [2500000.0]})
+    save_test_dataset(db_session, tmp_path, tenant_id_c, "sales", sales_df2, "sales2.csv")
+    mem_c = EnterpriseMemoryManager(db_session, tenant_id_c)
+    output2 = FinanceAgent(mem_c).execute("Calculate Net EBITDA margin")
+    ebitda_insight2 = next((i for i in output2.insights if "Net EBITDA Analysis" in i), "")
+    assert "$2,200,000.00 Net EBITDA" in ebitda_insight2
+    assert "88.00%" in ebitda_insight2
+
+def test_regression_strategic_recommendation_data_derived(db_session, tmp_path):
+    """Regression Test 2: Assert Strategic Recommendations use real data baselines instead of hardcoded numbers."""
+    from app.services.agents.strategic_and_validator import StrategicIntelligenceAgent
+    from app.services.agents.department_agents import MarketingAgent, HRAgent
+
+    tenant_id = "test_strategic_data_tenant"
+
+    mkt_df = pd.DataFrame({
+        "mql_leads": [400],
+        "ad_spend": [20000.0]
+    })
+    save_test_dataset(db_session, tmp_path, tenant_id, "marketing", mkt_df, "marketing.csv")
+    memory = EnterpriseMemoryManager(db_session, tenant_id)
+    mkt_agent = MarketingAgent(memory)
+    mkt_output = mkt_agent.execute("Analyze marketing spend and leads")
+
+    recs = StrategicIntelligenceAgent.generate_recommendations("Evaluate marketing efficiency", [mkt_output])
+    assert len(recs) >= 1
+    # Check that CAC baseline is dynamically derived ($20,000 / 400 = $50.00)
+    assert "$50.00/lead" in recs[0].expected_impact or "400" in recs[1].expected_impact
+    assert "-22%" not in recs[0].expected_impact
+

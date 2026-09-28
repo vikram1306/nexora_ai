@@ -210,10 +210,13 @@ class FinanceAgent(BaseDepartmentAgent):
             # ONLY append EBITDA line if prompt explicitly asks for profit/margin/ebitda
             if any(k in prompt_lower for k in ["ebitda", "profit", "margin", "net income"]):
                 sales_df = self.memory.query_department_dataframe("sales")
-                total_rev = float(sales_df['sales_amount'].sum()) if (sales_df is not None and 'sales_amount' in sales_df.columns) else 2693000.0
-                net_ebitda = total_rev - total_exp
-                ebitda_margin = (net_ebitda / total_rev) * 100
-                insights.append(f"**Cross-Departmental Net EBITDA Analysis**: Comparing Total Sales Revenue (${total_rev:,.2f}) against Operating Expenditure (${total_exp:,.2f}) yields **${net_ebitda:,.2f} Net EBITDA** (Net EBITDA Margin: **{ebitda_margin:.2f}%**).")
+                rev_col = next((c for c in sales_df.select_dtypes(include=[np.number]).columns if "amount" in c or "sales" in c or "rev" in c), None) if (sales_df is not None and not sales_df.empty) else None
+                total_rev = float(sales_df[rev_col].sum()) if (sales_df is not None and rev_col) else None
+                if total_rev is not None and total_rev > 0:
+                    net_ebitda = total_rev - total_exp
+                    ebitda_margin = (net_ebitda / total_rev) * 100
+                    metrics.append(MetricDetail(name="Net EBITDA", value=round(net_ebitda, 2), unit="$"))
+                    insights.append(f"**Cross-Departmental Net EBITDA Analysis**: Comparing Total Sales Revenue (${total_rev:,.2f}) against Operating Expenditure (${total_exp:,.2f}) yields **${net_ebitda:,.2f} Net EBITDA** (Net EBITDA Margin: **{ebitda_margin:.2f}%**).")
             
             period_label = f" for requested period ({', '.join(target_periods)})" if target_periods else ""
             insights.append(f"Financial operating expenditure stands at ${total_exp:,.2f}{period_label}.")

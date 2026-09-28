@@ -9,6 +9,13 @@ from app.services.sentinel.sentinel_service import SentinelAIService
 
 router = APIRouter(prefix="/sentinel", tags=["Sentinel AI Monitoring"])
 
+ROLE_HIERARCHY = {
+    "Employee": ["Employee"],
+    "Manager": ["Employee", "Manager"],
+    "Director": ["Employee", "Manager", "Director"],
+    "CEO": ["Employee", "Manager", "Director", "CEO"]
+}
+
 @router.get("/alerts", response_model=List[SentinelAlertResponse])
 def get_sentinel_alerts(
     severity: Optional[str] = None,
@@ -16,7 +23,11 @@ def get_sentinel_alerts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(SentinelAlert).filter(SentinelAlert.tenant_id == current_user.tenant_id)
+    allowed_roles = ROLE_HIERARCHY.get(current_user.role, ["Employee"])
+    query = db.query(SentinelAlert).filter(
+        SentinelAlert.tenant_id == current_user.tenant_id,
+        SentinelAlert.target_role.in_(allowed_roles)
+    )
     if severity:
         query = query.filter(SentinelAlert.severity == severity.upper())
     if acknowledged is not None:

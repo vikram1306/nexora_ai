@@ -168,7 +168,8 @@ class PlannerAgent:
     def _synthesize_dynamic_llm_response(self, prompt: str, base_summary: str, department_outputs: List[DepartmentAgentOutput]) -> str:
         """Synthesizes dynamic LLM responses via Ollama Llama 3 while strictly preserving statistical accuracy and markdown glass card formatting."""
         try:
-            with httpx.Client(timeout=2.5) as client:
+            timeout_config = httpx.Timeout(1.5, connect=0.3)
+            with httpx.Client(timeout=timeout_config) as client:
                 ollama_req = {
                     "model": "llama3",
                     "prompt": (
@@ -205,14 +206,14 @@ class PlannerAgent:
 
             # Get revenue from sales output metrics
             if sales_out and sales_out.metrics:
-                rev_m = next((m for m in sales_out.metrics if "Revenue" in m.name or "Sales" in m.name), sales_out.metrics[0])
-                if rev_m and rev_m.value:
+                rev_m = next((m for m in sales_out.metrics if any(k in m.name.lower() for k in ["revenue", "sales", "amount", "total"])), None)
+                if rev_m and rev_m.value is not None:
                     total_rev = float(rev_m.value)
 
             # Get expenses from finance output metrics
             if finance_out and finance_out.metrics:
-                exp_m = next((m for m in finance_out.metrics if "Expense" in m.name or "Cost" in m.name), finance_out.metrics[0])
-                if exp_m and exp_m.value:
+                exp_m = next((m for m in finance_out.metrics if any(k in m.name.lower() for k in ["expense", "cost", "spending", "operating"])), None)
+                if exp_m and exp_m.value is not None:
                     total_exp = float(exp_m.value)
 
             # Fallback to direct dataframe query if metrics missed them
