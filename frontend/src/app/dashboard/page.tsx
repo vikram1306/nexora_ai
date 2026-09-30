@@ -52,6 +52,11 @@ export default function ExecutiveDashboard() {
   const [uploadSuccess, setUploadSuccess] = useState('');
   const [uploadedDatasets, setUploadedDatasets] = useState<any[]>([]);
 
+  // Schema Intelligence Modal State
+  const [schemaProposal, setSchemaProposal] = useState<any | null>(null);
+  const [userMapping, setUserMapping] = useState<Record<string, string>>({});
+  const [isConfirmingSchema, setIsConfirmingSchema] = useState(false);
+
   // Sentinel Alerts State
   const [alerts, setAlerts] = useState<any[]>([]);
 
@@ -188,6 +193,93 @@ export default function ExecutiveDashboard() {
       setApiError(`Could not connect to backend server at ${getApiUrl()}. Make sure your backend server is running on port 8000.`);
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  // Analyze CSV Schema to Propose Canonical Mapping
+  const handleAnalyzeSchema = async () => {
+    if (!fileToUpload) {
+      setApiError('Please select a CSV file first.');
+      return;
+    }
+    if (!token) {
+      setApiError('Authenticating with backend server... Please try again in a second.');
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadSuccess('');
+    setApiError('');
+
+    const formData = new FormData();
+    formData.append('department', selectedDept);
+    formData.append('file', fileToUpload);
+
+    try {
+      const res = await fetch(`${getApiUrl()}/api/v1/ingest/analyze-schema`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+
+      if (res.ok) {
+        const proposalData = await res.json();
+        setSchemaProposal(proposalData);
+        
+        const initialMap: Record<string, string> = {};
+        proposalData.proposed_mappings.forEach((item: any) => {
+          initialMap[item.user_column] = item.proposed_canonical;
+        });
+        setUserMapping(initialMap);
+      } else {
+        const errData = await res.json();
+        setApiError(errData.detail || 'Failed to analyze CSV schema.');
+      }
+    } catch (err: any) {
+      setApiError(`Could not connect to backend server at ${getApiUrl()}. Make sure backend is running on port 8000.`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Confirm Schema Mapping & Ingest Dataset
+  const handleConfirmAndIngest = async () => {
+    if (!schemaProposal || !token) return;
+    setIsConfirmingSchema(true);
+    setApiError('');
+
+    try {
+      const res = await fetch(`${getApiUrl()}/api/v1/ingest/confirm-and-ingest`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          temp_file_id: schemaProposal.temp_file_id,
+          department: schemaProposal.department,
+          confirmed_mapping: userMapping
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setUploadSuccess(`Successfully ingested '${data.name}' (${data.row_count} rows) with verified AI schema mapping into ${selectedDept.toUpperCase()} Enterprise Memory!`);
+        setSchemaProposal(null);
+        setFileToUpload(null);
+        fetchDatasets();
+        fetch(`${getApiUrl()}/api/v1/sentinel/trigger`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      } else {
+        const errData = await res.json();
+        setApiError(errData.detail || 'Failed to confirm schema mapping.');
+      }
+    } catch (err: any) {
+      setApiError('Error confirming schema mapping.');
+    } finally {
+      setIsConfirmingSchema(false);
     }
   };
 
@@ -774,17 +866,126 @@ export default function ExecutiveDashboard() {
                 />
               </div>
 
-              <button
-                onClick={handleFileUpload}
-                disabled={isUploading}
-                className="w-full py-4 rounded-xl bg-white text-obsidian-950 font-semibold text-sm hover:bg-neutral-200 transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                {isUploading ? <RefreshCw className="w-4 h-4 animate-spin" /> : 'Run Ingestion Pipeline'}
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleAnalyzeSchema}
+                  disabled={isUploading}
+                  className="flex-1 py-4 rounded-xl bg-accent-cyan text-obsidian-950 font-bold text-sm hover:bg-accent-cyan/90 transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isUploading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  Inspect & Confirm AI Schema Mapping
+                </button>
+                <button
+                  onClick={handleFileUpload}
+                  disabled={isUploading}
+                  className="px-4 py-4 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white font-semibold text-xs transition-all disabled:opacity-50"
+                  title="Direct Upload with Auto-Confirmed Schema"
+                >
+                  Quick Ingest
+                </button>
+              </div>
 
               {uploadSuccess && (
                 <div className="p-4 rounded-xl bg-accent-emerald/10 border border-accent-emerald/30 text-accent-emerald text-xs flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4" /> {uploadSuccess}
+                </div>
+              )}
+
+              {/* Interactive AI Schema Intelligence Confirmation Modal */}
+              {schemaProposal && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+                  <div className="bg-obsidian-900 border border-accent-cyan/30 rounded-2xl p-6 max-w-3xl w-full space-y-5 shadow-2xl overflow-y-auto max-h-[85vh]">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                      <div>
+                        <span className="text-xs font-mono uppercase px-2.5 py-0.5 rounded bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/30">
+                          AI Schema Mapping Confirmation
+                        </span>
+                        <h3 className="text-xl font-serif font-bold text-white mt-1">
+                          Verify Column Mapping for {schemaProposal.filename}
+                        </h3>
+                        <p className="text-xs text-neutral-400 mt-0.5">
+                          Department: <span className="uppercase text-accent-emerald font-semibold">{schemaProposal.department}</span> | {schemaProposal.total_columns} Columns Analyzed
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setSchemaProposal(null)}
+                        className="text-neutral-400 hover:text-white text-sm font-semibold"
+                      >
+                        ✕ Cancel
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="text-xs text-neutral-300">
+                        Confirm or update the AI-proposed canonical schema field mappings for zero-hallucination execution:
+                      </div>
+
+                      <div className="divide-y divide-white/5 border border-white/10 rounded-xl overflow-hidden bg-obsidian-850">
+                        <div className="grid grid-cols-12 px-4 py-2.5 text-[10px] font-mono uppercase text-neutral-400 bg-white/5">
+                          <div className="col-span-4">CSV Column & Sample</div>
+                          <div className="col-span-3">AI Confidence</div>
+                          <div className="col-span-5">Canonical Target Field</div>
+                        </div>
+
+                        {schemaProposal.proposed_mappings.map((item: any, idx: number) => (
+                          <div key={idx} className="grid grid-cols-12 px-4 py-3 items-center text-xs gap-2">
+                            <div className="col-span-4">
+                              <div className="font-semibold text-white">{item.user_column}</div>
+                              <div className="text-[10px] text-neutral-500 truncate font-mono">
+                                Sample: {item.sample_values.join(', ') || 'N/A'}
+                              </div>
+                            </div>
+                            <div className="col-span-3">
+                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-mono font-semibold ${
+                                item.confidence >= 0.85
+                                  ? 'bg-accent-emerald/10 text-accent-emerald border border-accent-emerald/30'
+                                  : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                              }`}>
+                                {Math.round(item.confidence * 100)}% Match
+                              </span>
+                            </div>
+                            <div className="col-span-5">
+                              <select
+                                value={userMapping[item.user_column] || item.proposed_canonical}
+                                onChange={(e) => setUserMapping({ ...userMapping, [item.user_column]: e.target.value })}
+                                className="w-full px-3 py-1.5 rounded-lg bg-obsidian-950 border border-white/20 text-white text-xs focus:outline-none focus:border-accent-cyan"
+                              >
+                                {item.available_options.map((opt: string) => (
+                                  <option key={opt} value={opt}>
+                                    {opt === 'ignore' ? '🚫 Ignore Column' : `🎯 Mapped to: ${opt}`}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
+                      <button
+                        onClick={() => setSchemaProposal(null)}
+                        className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-semibold"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleConfirmAndIngest}
+                        disabled={isConfirmingSchema}
+                        className="px-6 py-2.5 rounded-xl bg-accent-cyan text-obsidian-950 font-bold text-xs hover:bg-accent-cyan/90 transition-all flex items-center gap-2 shadow-lg disabled:opacity-50"
+                      >
+                        {isConfirmingSchema ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" /> Ingesting Verified Schema...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4" /> Confirm & Ingest Verified Schema
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

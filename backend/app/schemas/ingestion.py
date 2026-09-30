@@ -28,3 +28,24 @@ class DatasetResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class ColumnMappingProposal(BaseModel):
+    user_column: str
+    proposed_canonical: str
+    confidence: float
+    data_type: str
+    sample_values: List[Any]
+    available_options: List[str]
+
+class SchemaAnalysisResponse(BaseModel):
+    department: str
+    filename: str
+    temp_file_id: str
+    total_columns: int
+    proposed_mappings: List[ColumnMappingProposal]
+    canonical_fields_available: List[str]
+
+class SchemaConfirmationRequest(BaseModel):
+    temp_file_id: str
+    department: str
+    confirmed_mapping: Dict[str, str]
