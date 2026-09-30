@@ -56,20 +56,27 @@ class SentinelAIService:
 
                 # Use Median Absolute Deviation (MAD) for robust outlier detection on small/medium samples
                 if mad_val > 0:
+                    robust_sigma = 1.4826 * mad_val
                     z_scores = np.abs(0.6745 * (col_data - median_val) / mad_val)
                     baseline_val = median_val
                 elif std_val > 0:
+                    robust_sigma = std_val
                     z_scores = np.abs((col_data - mean_val) / std_val)
                     baseline_val = mean_val
                 else:
                     continue
 
+                # Compute 98.8% statistical confidence bounds at Z = 2.5
+                confidence_level = 0.988
+                lower_bound = float(baseline_val - 2.5 * robust_sigma)
+                upper_bound = float(baseline_val + 2.5 * robust_sigma)
+
                 anomaly_indices = np.where(z_scores >= 2.5)[0]
 
                 if len(anomaly_indices) > 0:
                     max_idx = anomaly_indices[0]
-                    anomaly_val = col_data[max_idx]
-                    z_val = z_scores[max_idx]
+                    anomaly_val = float(col_data[max_idx])
+                    z_val = float(z_scores[max_idx])
 
                     # Assign Severity based on MAD/Z-score magnitude
                     if z_val > 4.0:
@@ -85,10 +92,24 @@ class SentinelAIService:
                         severity = "LOW"
                         target_role = "Employee"
 
-                    direction = "spike" if anomaly_val > baseline_val else "drop"
+                    is_spike = anomaly_val > baseline_val
+                    direction = "spike" if is_spike else "drop"
                     title = f"Anomaly Flagged: Sudden {direction} in {col} ({ds.department.upper()})"
-                    description = f"Detected a statistical outlier value of {anomaly_val:.2f} on metric '{col}' (baseline median/mean: {baseline_val:.2f}, robust Z-Score: {z_val:.2f})."
-                    root_cause = f"Metric '{col}' deviated by {z_val:.1f} robust standard deviations from median baseline in record #{max_idx + 1} of dataset '{ds.name}'."
+                    description = (
+                        f"Detected a statistical outlier value of {anomaly_val:,.2f} on metric '{col}' "
+                        f"outside the 98.8% confidence interval [{lower_bound:,.2f}, {upper_bound:,.2f}] "
+                        f"(baseline: {baseline_val:,.2f}, robust Z-Score: {z_val:.2f})."
+                    )
+                    
+                    breach_detail = (
+                        f"exceeded upper confidence bound of {upper_bound:,.2f} by +{abs(anomaly_val - upper_bound):,.2f}"
+                        if is_spike else
+                        f"fell below lower confidence bound of {lower_bound:,.2f} by -{abs(lower_bound - anomaly_val):,.2f}"
+                    )
+                    root_cause = (
+                        f"Metric '{col}' value {anomaly_val:,.2f} {breach_detail} "
+                        f"(Z-Score: {z_val:.2f}, 98.8% confidence interval) in record #{max_idx + 1} of dataset '{ds.name}'."
+                    )
 
                     # Check if alert already logged recently
                     existing = self.db.query(SentinelAlert).filter(
@@ -107,7 +128,12 @@ class SentinelAIService:
                             target_role=target_role,
                             title=title,
                             description=description,
-                            root_cause=root_cause
+                            root_cause=root_cause,
+                            confidence_level=confidence_level,
+                            lower_bound=round(lower_bound, 2),
+                            upper_bound=round(upper_bound, 2),
+                            baseline_value=round(baseline_val, 2),
+                            anomaly_value=round(anomaly_val, 2)
                         )
                         self.db.add(alert)
                         alerts_created.append(alert)

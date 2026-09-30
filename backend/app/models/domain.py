@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, ForeignKey, Integer, Boolean, Text, JSON
+from sqlalchemy import Column, String, DateTime, ForeignKey, Integer, Boolean, Text, JSON, Float
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
@@ -72,6 +72,11 @@ class SentinelAlert(Base):
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
     root_cause = Column(Text, nullable=False)
+    confidence_level = Column(Float, nullable=True, default=0.988)
+    lower_bound = Column(Float, nullable=True)
+    upper_bound = Column(Float, nullable=True)
+    baseline_value = Column(Float, nullable=True)
+    anomaly_value = Column(Float, nullable=True)
     acknowledged = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 

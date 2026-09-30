@@ -12,6 +12,11 @@ class SentinelAlertResponse(BaseModel):
     title: str
     description: str
     root_cause: str
+    confidence_level: Optional[float] = None
+    lower_bound: Optional[float] = None
+    upper_bound: Optional[float] = None
+    baseline_value: Optional[float] = None
+    anomaly_value: Optional[float] = None
     acknowledged: bool
     created_at: datetime
 

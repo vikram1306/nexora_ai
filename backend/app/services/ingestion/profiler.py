@@ -117,23 +117,95 @@ class DataProfiler:
     @staticmethod
     def _detect_trends(df: pd.DataFrame, numeric_cols: List[str], datetime_cols: List[str]) -> List[Dict[str, Any]]:
         trends = []
-        if not numeric_cols:
+        if not numeric_cols or df.empty:
             return trends
 
+        # Identify primary date/time column for period aggregation
+        date_col = None
+        if datetime_cols:
+            date_col = datetime_cols[0]
+        else:
+            date_col = next((c for c in df.columns if any(k in c.lower() for k in ["date", "month", "time", "year", "period"])), None)
+
         for col in numeric_cols[:4]:
-            col_data = df[col].values
-            if len(col_data) >= 2:
-                first_val = float(col_data[0])
-                last_val = float(col_data[-1])
-                change_pct = ((last_val - first_val) / abs(first_val)) * 100 if first_val != 0 else 0.0
+            if date_col and date_col in df.columns:
+                try:
+                    df_copy = df.copy()
+                    df_copy['parsed_d'] = pd.to_datetime(df_copy[date_col], errors='coerce')
+                    valid_df = df_copy.dropna(subset=['parsed_d']).sort_values('parsed_d')
+
+                    if not valid_df.empty:
+                        valid_df['period_key'] = valid_df['parsed_d'].dt.to_period('M').astype(str)
+                        # Period-over-period aggregation (groupby month sum)
+                        period_agg = valid_df.groupby('period_key')[col].sum()
+                        
+                        if len(period_agg) >= 2:
+                            periods = list(period_agg.index)
+                            first_period = periods[0]
+                            last_period = periods[-1]
+                            start_val = float(period_agg[first_period])
+                            end_val = float(period_agg[last_period])
+
+                            change_pct = ((end_val - start_val) / abs(start_val)) * 100 if start_val != 0 else 0.0
+                            direction = "increased" if change_pct > 0 else "decreased" if change_pct < 0 else "stable"
+
+                            # Calculate consecutive period-over-period progression
+                            pop_changes = []
+                            for i in range(1, len(periods)):
+                                p_prev, p_curr = periods[i-1], periods[i]
+                                v_prev, v_curr = float(period_agg[p_prev]), float(period_agg[p_curr])
+                                pop_pct = ((v_curr - v_prev) / abs(v_prev)) * 100 if v_prev != 0 else 0.0
+                                pop_changes.append({
+                                    "from_period": str(p_prev),
+                                    "to_period": str(p_curr),
+                                    "change_pct": round(pop_pct, 2)
+                                })
+
+                            trends.append({
+                                "metric": col,
+                                "direction": direction,
+                                "change_percentage": round(change_pct, 2),
+                                "start_val": round(start_val, 2),
+                                "end_val": round(end_val, 2),
+                                "start_period": str(first_period),
+                                "end_period": str(last_period),
+                                "period_over_period": pop_changes
+                            })
+                            continue
+                except Exception:
+                    pass
+
+            # Fallback for non-dated datasets: split into equal chronological buckets/halves
+            col_series = df[col].dropna()
+            n = len(col_series)
+            if n >= 4:
+                half_n = n // 2
+                start_val = float(col_series.iloc[:half_n].sum())
+                end_val = float(col_series.iloc[half_n:].sum())
+                change_pct = ((end_val - start_val) / abs(start_val)) * 100 if start_val != 0 else 0.0
                 direction = "increased" if change_pct > 0 else "decreased" if change_pct < 0 else "stable"
-                
+
                 trends.append({
                     "metric": col,
                     "direction": direction,
                     "change_percentage": round(change_pct, 2),
-                    "start_val": round(first_val, 2),
-                    "end_val": round(last_val, 2)
+                    "start_val": round(start_val, 2),
+                    "end_val": round(end_val, 2),
+                    "start_period": "first_half",
+                    "end_period": "second_half"
+                })
+            elif n >= 2:
+                start_val = float(col_series.iloc[0])
+                end_val = float(col_series.iloc[-1])
+                change_pct = ((end_val - start_val) / abs(start_val)) * 100 if start_val != 0 else 0.0
+                direction = "increased" if change_pct > 0 else "decreased" if change_pct < 0 else "stable"
+
+                trends.append({
+                    "metric": col,
+                    "direction": direction,
+                    "change_percentage": round(change_pct, 2),
+                    "start_val": round(start_val, 2),
+                    "end_val": round(end_val, 2)
                 })
 
         return trends
