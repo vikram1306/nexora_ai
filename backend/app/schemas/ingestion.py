@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
@@ -15,8 +15,7 @@ class DatasetSchemaResponse(BaseModel):
     trends_detected: List[Dict[str, Any]]
     relationships: List[Dict[str, Any]]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class DatasetResponse(BaseModel):
     id: str
@@ -26,8 +25,7 @@ class DatasetResponse(BaseModel):
     created_at: datetime
     schema_info: Optional[DatasetSchemaResponse] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ColumnMappingProposal(BaseModel):
     user_column: str

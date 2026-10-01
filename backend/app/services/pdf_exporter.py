@@ -1,5 +1,6 @@
 import io
 from fpdf import FPDF
+from fpdf.enums import XPos, YPos
 from app.schemas.agents import ExecutiveQueryResponse
 
 class ExecutiveReportPDF(FPDF):
@@ -9,11 +10,11 @@ class ExecutiveReportPDF(FPDF):
         
         self.set_font("Helvetica", "B", 16)
         self.set_text_color(255, 255, 255)
-        self.cell(0, 10, "NEXORA AI - EXECUTIVE INTELLIGENCE REPORT", ln=True, align="L")
+        self.cell(0, 10, "NEXORA AI - EXECUTIVE INTELLIGENCE REPORT", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="L")
         
         self.set_font("Helvetica", "", 9)
         self.set_text_color(148, 163, 184)
-        self.cell(0, 6, "Zero-Hallucination Verified | Autonomous Enterprise OS", ln=True, align="L")
+        self.cell(0, 6, "Zero-Hallucination Verified | Autonomous Enterprise OS", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="L")
         self.ln(10)
 
     def footer(self):

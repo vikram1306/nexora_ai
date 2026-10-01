@@ -1,0 +1,44 @@
+.git
+.gitignore
+.dockerignore
+README.md
+CLAUDE.md
+docs/
+sample_datasets/
+
+# Python & Virtual Environments
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/venv/
+**/.venv/
+**/env/
+
+# Node.js & Next.js
+**/node_modules/
+**/.next/
+**/out/
+**/build/
+
+# Testing & Cache
+**/.pytest_cache/
+**/.coverage
+**/coverage/
+
+# Local Databases, Uploads & Vector Stores
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+**/chroma_db/
+**/data_uploads/
+
+# Environment & Secrets
+**/.env*
+!**/.env.example
+
+# IDE & OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
