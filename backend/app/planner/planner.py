@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.memory.enterprise_memory import EnterpriseMemoryManager
 from app.schemas.agents import (
@@ -183,7 +184,7 @@ class PlannerAgent:
                     ),
                     "stream": False
                 }
-                res = client.post("http://localhost:11434/api/generate", json=ollama_req)
+                res = client.post(settings.OLLAMA_URL, json=ollama_req)
                 if res.status_code == 200:
                     text = res.json().get("response", "").strip()
                     if text and "###" in text and len(text) > 50:
