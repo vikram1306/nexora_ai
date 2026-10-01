@@ -10,7 +10,9 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.database import Base
 from app.services.memory.enterprise_memory import EnterpriseMemoryManager
-from app.services.agents.department_agents import FinanceAgent, MarketingAgent, apply_natural_language_date_filter
+from app.services.agents.finance import FinanceAgent
+from app.services.agents.marketing import MarketingAgent
+from app.utils.date_filters import apply_natural_language_date_filter
 from app.services.agents.planner import PlannerAgent
 from app.services.sentinel.sentinel_service import SentinelAIService
 from app.models.domain import Dataset, SentinelAlert
@@ -184,8 +186,9 @@ def test_regression_ebitda_output_changes_with_input_data(db_session, tmp_path):
 
 def test_regression_strategic_recommendation_data_derived(db_session, tmp_path):
     """Regression Test 2: Assert Strategic Recommendations use real data baselines instead of hardcoded numbers."""
-    from app.services.agents.strategic_and_validator import StrategicIntelligenceAgent
-    from app.services.agents.department_agents import MarketingAgent, HRAgent
+    from app.services.intelligence import StrategicIntelligenceAgent
+    from app.services.agents.marketing import MarketingAgent
+    from app.services.agents.hr import HRAgent
 
     tenant_id = "test_strategic_data_tenant"
 

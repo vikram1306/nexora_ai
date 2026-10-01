@@ -9,10 +9,10 @@ from app.services.memory.enterprise_memory import EnterpriseMemoryManager
 from app.schemas.agents import (
     PlannerTaskPlan, DepartmentAgentOutput, ExecutiveQueryResponse
 )
-from app.services.agents.department_agents import (
+from app.services.agents import (
     SalesAgent, FinanceAgent, HRAgent, MarketingAgent, OperationsAgent
 )
-from app.services.agents.strategic_and_validator import ResponseValidator, StrategicIntelligenceAgent
+from app.services.intelligence import ResponseValidator, StrategicIntelligenceAgent
 
 OOD_KEYWORDS = [
     "politics", "election", "president", "vote", "medical", "doctor", "symptom",
