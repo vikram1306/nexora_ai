@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.core.security import hash_password, verify_password
-from app.services.ingestion.profiler import DataProfiler
+from app.ingestion.profiler import DataProfiler
 
 client = TestClient(app)
 

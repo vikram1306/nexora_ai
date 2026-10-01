@@ -1,8 +1,8 @@
 import pytest
 import pandas as pd
 import numpy as np
-from app.services.ingestion.profiler import DataProfiler
-from app.services.sentinel.sentinel_service import SentinelAIService
+from app.ingestion.profiler import DataProfiler
+from app.sentinel.sentinel_service import SentinelAIService
 from app.models.domain import Dataset, SentinelAlert
 from tests.test_phase2_verification import save_dataset
 

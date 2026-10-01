@@ -1,9 +1,9 @@
 import time
 import pytest
 import pandas as pd
-from app.services.agents.planner import PlannerAgent
-from app.services.memory.enterprise_memory import EnterpriseMemoryManager
-from app.services.intelligence import ResponseValidator
+from app.planner.planner import PlannerAgent
+from app.memory.enterprise_memory import EnterpriseMemoryManager
+from app.intelligence import ResponseValidator
 from app.schemas.agents import DepartmentAgentOutput, MetricDetail
 from app.models.domain import Dataset
 

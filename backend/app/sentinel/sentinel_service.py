@@ -3,7 +3,7 @@ import numpy as np
 from typing import List, Dict, Any
 from sqlalchemy.orm import Session
 from app.models.domain import Dataset, SentinelAlert
-from app.services.memory.enterprise_memory import EnterpriseMemoryManager
+from app.memory.enterprise_memory import EnterpriseMemoryManager
 
 class SentinelAIService:
     """Continuous background anomaly detection daemon and root cause analysis engine."""

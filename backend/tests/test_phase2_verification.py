@@ -13,9 +13,9 @@ from app.main import app
 from app.core.database import Base, get_db
 from app.core.security import create_access_token, hash_password
 from app.models.domain import User, Tenant, Dataset, SentinelAlert
-from app.services.memory.enterprise_memory import EnterpriseMemoryManager
-from app.services.sentinel.sentinel_service import SentinelAIService
-from app.services.agents.planner import PlannerAgent
+from app.memory.enterprise_memory import EnterpriseMemoryManager
+from app.sentinel.sentinel_service import SentinelAIService
+from app.planner.planner import PlannerAgent
 
 from tests.conftest import TestingSessionLocal
 

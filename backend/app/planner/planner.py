@@ -5,14 +5,14 @@ import numpy as np
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
-from app.services.memory.enterprise_memory import EnterpriseMemoryManager
+from app.memory.enterprise_memory import EnterpriseMemoryManager
 from app.schemas.agents import (
     PlannerTaskPlan, DepartmentAgentOutput, ExecutiveQueryResponse
 )
-from app.services.agents import (
+from app.agents import (
     SalesAgent, FinanceAgent, HRAgent, MarketingAgent, OperationsAgent
 )
-from app.services.intelligence import ResponseValidator, StrategicIntelligenceAgent
+from app.intelligence import ResponseValidator, StrategicIntelligenceAgent
 
 OOD_KEYWORDS = [
     "politics", "election", "president", "vote", "medical", "doctor", "symptom",

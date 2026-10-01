@@ -1,9 +1,9 @@
 import pandas as pd
 import numpy as np
 from typing import List
-from app.services.memory.enterprise_memory import EnterpriseMemoryManager
+from app.memory.enterprise_memory import EnterpriseMemoryManager
 from app.schemas.agents import DepartmentAgentOutput, MetricDetail
-from app.services.agents.base import BaseDepartmentAgent
+from app.agents.base import BaseDepartmentAgent
 from app.utils.date_filters import apply_natural_language_date_filter
 
 class FinanceAgent(BaseDepartmentAgent):

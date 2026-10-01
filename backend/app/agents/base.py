@@ -1,6 +1,6 @@
 import pandas as pd
 from typing import List
-from app.services.memory.enterprise_memory import EnterpriseMemoryManager
+from app.memory.enterprise_memory import EnterpriseMemoryManager
 from app.schemas.agents import DepartmentAgentOutput
 
 class BaseDepartmentAgent:

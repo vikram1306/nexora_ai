@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from app.services.ingestion.schema_intelligence import SchemaIntelligenceEngine
+from app.ingestion.schema_intelligence import SchemaIntelligenceEngine
 from app.models.domain import Dataset, DatasetSchema
 from tests.test_phase2_verification import create_test_user_and_token, client
 

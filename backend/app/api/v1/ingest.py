@@ -9,9 +9,9 @@ from app.core.database import get_db
 from app.models.domain import User, Dataset, DatasetSchema
 from app.schemas.ingestion import DatasetResponse, SchemaAnalysisResponse, SchemaConfirmationRequest
 from app.api.deps import get_current_user
-from app.services.ingestion.profiler import DataProfiler
-from app.services.ingestion.schema_intelligence import SchemaIntelligenceEngine
-from app.services.memory.vector_store import vector_memory_store
+from app.ingestion.profiler import DataProfiler
+from app.ingestion.schema_intelligence import SchemaIntelligenceEngine
+from app.memory.vector_store import vector_memory_store
 
 router = APIRouter(prefix="/ingest", tags=["Data Ingestion & Memory"])
 

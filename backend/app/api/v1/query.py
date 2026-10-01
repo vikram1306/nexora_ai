@@ -5,7 +5,7 @@ from app.core.database import get_db
 from app.models.domain import User
 from app.schemas.agents import ExecutiveQueryRequest, ExecutiveQueryResponse
 from app.api.deps import get_current_user
-from app.services.agents.planner import PlannerAgent
+from app.planner.planner import PlannerAgent
 
 router = APIRouter(prefix="/query", tags=["Multi-Agent Intelligence Query"])
 
@@ -29,7 +29,7 @@ def export_executive_pdf(
 ):
     """Executes query and streams back a formatted PDF executive intelligence report."""
     from fastapi.responses import Response
-    from app.services.pdf_exporter import generate_executive_pdf_bytes
+    from app.reporting.pdf_exporter import generate_executive_pdf_bytes
 
     if not request.prompt.strip():
         raise HTTPException(status_code=400, detail="Query prompt cannot be empty")

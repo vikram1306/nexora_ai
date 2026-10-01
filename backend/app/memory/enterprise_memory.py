@@ -2,7 +2,7 @@ import pandas as pd
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 from app.models.domain import Dataset, DatasetSchema
-from app.services.memory.vector_store import vector_memory_store
+from app.memory.vector_store import vector_memory_store
 
 class EnterpriseMemoryManager:
     """Enterprise Memory Layer coordinating SQL querying, pandas analytics, and ChromaDB vector search."""

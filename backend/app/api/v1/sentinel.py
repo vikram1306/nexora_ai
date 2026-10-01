@@ -5,7 +5,7 @@ from app.core.database import get_db
 from app.models.domain import User, SentinelAlert
 from app.schemas.sentinel import SentinelAlertResponse
 from app.api.deps import get_current_user
-from app.services.sentinel.sentinel_service import SentinelAIService
+from app.sentinel.sentinel_service import SentinelAIService
 
 router = APIRouter(prefix="/sentinel", tags=["Sentinel AI Monitoring"])
 
