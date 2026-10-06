@@ -2,10 +2,12 @@ import os
 import uuid
 import shutil
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, status
 from sqlalchemy.orm import Session
 from typing import List
+from app.core.config import settings
 from app.core.database import get_db
+from app.core.limiter import limiter
 from app.models.domain import User, Dataset, DatasetSchema
 from app.schemas.ingestion import DatasetResponse, SchemaAnalysisResponse, SchemaConfirmationRequest
 from app.api.deps import get_current_user
@@ -15,12 +17,15 @@ from app.memory.vector_store import vector_memory_store
 
 router = APIRouter(prefix="/ingest", tags=["Data Ingestion & Memory"])
 
+
 ALLOWED_DEPARTMENTS = ["sales", "finance", "hr", "marketing", "operations"]
 DATA_STORAGE_DIR = "./data_uploads"
 STAGING_DIR = "./data_uploads/staging"
 
 @router.post("/analyze-schema", response_model=SchemaAnalysisResponse)
+@limiter.limit(settings.RATE_LIMIT_INGEST)
 async def analyze_csv_schema(
+    request: Request,
     department: str = Form(...),
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user)
@@ -61,11 +66,14 @@ async def analyze_csv_schema(
 
 
 @router.post("/confirm-and-ingest", response_model=DatasetResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(settings.RATE_LIMIT_INGEST)
 def confirm_and_ingest_dataset(
+    request: Request,
     req: SchemaConfirmationRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+
     department_clean = req.department.lower().strip()
     if department_clean not in ALLOWED_DEPARTMENTS:
         raise HTTPException(status_code=400, detail=f"Invalid department '{req.department}'")

@@ -14,6 +14,8 @@ from app.agents import (
     SalesAgent, FinanceAgent, HRAgent, MarketingAgent, OperationsAgent
 )
 from app.intelligence import ResponseValidator, StrategicIntelligenceAgent
+from app.utils.sanitizer import sanitize_text_for_prompt
+
 
 OOD_KEYWORDS = [
     "politics", "election", "president", "vote", "medical", "doctor", "symptom",
@@ -169,18 +171,20 @@ class PlannerAgent:
     def _synthesize_dynamic_llm_response(self, prompt: str, base_summary: str, department_outputs: List[DepartmentAgentOutput]) -> str:
         """Synthesizes dynamic LLM responses via Ollama Llama 3 while strictly preserving statistical accuracy and markdown glass card formatting."""
         try:
+            clean_prompt = sanitize_text_for_prompt(prompt)
+            clean_summary = sanitize_text_for_prompt(base_summary)
             timeout_config = httpx.Timeout(1.5, connect=0.3)
             with httpx.Client(timeout=timeout_config) as client:
                 ollama_req = {
                     "model": "llama3",
                     "prompt": (
                         f"You are Nexora AI, an Enterprise Intelligence AI OS.\n"
-                        f"Synthesize a dynamic executive response to the user's specific prompt: \"{prompt}\"\n\n"
+                        f"Synthesize a dynamic executive response to the user's specific prompt: \"{clean_prompt}\"\n\n"
                         f"STRICT RULES:\n"
                         f"1. Directly answer the user's question in crisp executive language.\n"
                         f"2. YOU MUST PRESERVE ALL NUMBERS AND STATISTICAL METRICS FROM THE DATA EVIDENCE BELOW.\n"
                         f"3. FORMAT OUTPUT BEAUTIFULLY WITH MARKDOWN SECTION HEADERS `### SECTION_TITLE` AND BULLET POINTS `•`.\n\n"
-                        f"DATA EVIDENCE:\n{base_summary}"
+                        f"<data_evidence>\n{clean_summary}\n</data_evidence>"
                     ),
                     "stream": False
                 }
@@ -193,6 +197,7 @@ class PlannerAgent:
             pass
 
         return base_summary
+
 
     def _calculate_cross_departmental_ebitda(self, prompt: str, department_outputs: List[DepartmentAgentOutput]) -> Optional[str]:
         prompt_lower = prompt.lower()

@@ -1,13 +1,16 @@
 import re
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
+from app.core.config import settings
 from app.core.database import get_db
+from app.core.limiter import limiter
 from app.core.security import hash_password, verify_password, create_access_token
 from app.models.domain import Tenant, User
 from app.schemas.auth import UserRegister, UserLogin, Token, UserResponse
 from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
 
 def slugify(text: str) -> str:
     text = text.lower().strip()
@@ -50,7 +53,9 @@ def register_tenant_and_user(data: UserRegister, db: Session = Depends(get_db)):
     return Token(access_token=access_token, token_type="bearer", user=UserResponse.model_validate(user))
 
 @router.post("/login", response_model=Token)
-def login_user(data: UserLogin, db: Session = Depends(get_db)):
+@limiter.limit(settings.RATE_LIMIT_AUTH)
+def login_user(request: Request, data: UserLogin, db: Session = Depends(get_db)):
+
     user = db.query(User).filter(User.email == data.email).first()
     if not user or not verify_password(data.password, user.hashed_password):
         raise HTTPException(

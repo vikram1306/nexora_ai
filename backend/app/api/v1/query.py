@@ -1,7 +1,9 @@
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from app.core.config import settings
 from app.core.database import get_db
+from app.core.limiter import limiter
 from app.models.domain import User
 from app.schemas.agents import ExecutiveQueryRequest, ExecutiveQueryResponse
 from app.api.deps import get_current_user
@@ -10,16 +12,19 @@ from app.planner.planner import PlannerAgent
 router = APIRouter(prefix="/query", tags=["Multi-Agent Intelligence Query"])
 
 @router.post("/execute", response_model=ExecutiveQueryResponse)
+@limiter.limit(settings.RATE_LIMIT_QUERY)
 def execute_executive_query(
-    request: ExecutiveQueryRequest,
+    request: Request,
+    body: ExecutiveQueryRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if not request.prompt.strip():
+    if not body.prompt.strip():
         raise HTTPException(status_code=400, detail="Query prompt cannot be empty")
 
     planner = PlannerAgent(db, current_user.tenant_id)
-    return planner.execute_query(request.prompt)
+    return planner.execute_query(body.prompt)
+
 
 @router.post("/export-pdf")
 def export_executive_pdf(

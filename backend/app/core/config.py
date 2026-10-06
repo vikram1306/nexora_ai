@@ -30,9 +30,16 @@ class Settings(BaseSettings):
     # Ollama Local LLM Daemon
     OLLAMA_URL: str = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
     
+    # Rate Limiting Policy
+    RATE_LIMIT_AUTH: str = os.getenv("RATE_LIMIT_AUTH", "5/minute")
+    RATE_LIMIT_QUERY: str = os.getenv("RATE_LIMIT_QUERY", "20/minute")
+    RATE_LIMIT_INGEST: str = os.getenv("RATE_LIMIT_INGEST", "10/minute")
+
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000", "*"]
-    
+
     model_config = SettingsConfigDict(case_sensitive=True)
+
+
 
 settings = Settings()
