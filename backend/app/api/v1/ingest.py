@@ -2,25 +2,28 @@ import os
 import uuid
 import shutil
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, Query, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.limiter import limiter
-from app.models.domain import User, Dataset, DatasetSchema
-from app.schemas.ingestion import DatasetResponse, SchemaAnalysisResponse, SchemaConfirmationRequest
+from app.core.job_queue import job_manager
+from app.memory.redis_cache import cache_manager
+from app.models.domain import User, Dataset, IngestionJob
+from app.schemas.ingestion import (
+    DatasetResponse, SchemaAnalysisResponse, SchemaConfirmationRequest, IngestionJobResponse
+)
 from app.api.deps import get_current_user
-from app.ingestion.profiler import DataProfiler
 from app.ingestion.schema_intelligence import SchemaIntelligenceEngine
-from app.memory.vector_store import vector_memory_store
 
 router = APIRouter(prefix="/ingest", tags=["Data Ingestion & Memory"])
-
 
 ALLOWED_DEPARTMENTS = ["sales", "finance", "hr", "marketing", "operations"]
 DATA_STORAGE_DIR = "./data_uploads"
 STAGING_DIR = "./data_uploads/staging"
+
 
 @router.post("/analyze-schema", response_model=SchemaAnalysisResponse)
 @limiter.limit(settings.RATE_LIMIT_INGEST)
@@ -65,15 +68,15 @@ async def analyze_csv_schema(
         raise HTTPException(status_code=400, detail=f"Failed to analyze CSV schema: {str(e)}")
 
 
-@router.post("/confirm-and-ingest", response_model=DatasetResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/confirm-and-ingest", response_model=IngestionJobResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(settings.RATE_LIMIT_INGEST)
 def confirm_and_ingest_dataset(
     request: Request,
     req: SchemaConfirmationRequest,
+    sync: bool = Query(False, description="Run synchronously if True (default: background job)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-
     department_clean = req.department.lower().strip()
     if department_clean not in ALLOWED_DEPARTMENTS:
         raise HTTPException(status_code=400, detail=f"Invalid department '{req.department}'")
@@ -92,64 +95,40 @@ def confirm_and_ingest_dataset(
     os.makedirs(tenant_dir, exist_ok=True)
     final_file_path = os.path.join(tenant_dir, f"{department_clean}_{original_filename}")
 
-    try:
-        # Load CSV and apply confirmed column renames/canonical mapping
-        df = pd.read_csv(staged_path)
-        
-        # Filter mapping to valid non-ignore targets
-        rename_map = {orig: target for orig, target in req.confirmed_mapping.items() if target and target != "ignore" and orig in df.columns}
-        if rename_map:
-            df = df.rename(columns=rename_map)
-
-        df.to_csv(final_file_path, index=False)
-
-        profile_data = DataProfiler.profile_csv(final_file_path, department_clean)
-        profile_data["kpis_extracted"]["confirmed_mapping"] = req.confirmed_mapping
-    except Exception as e:
-        if os.path.exists(final_file_path):
-            os.remove(final_file_path)
-        raise HTTPException(status_code=400, detail=f"Failed to process confirmed dataset: {str(e)}")
-    finally:
-        if os.path.exists(staged_path):
-            os.remove(staged_path)
-
-    # Store into PostgreSQL
-    dataset = Dataset(
+    job = job_manager.create_and_enqueue_job(
         tenant_id=current_user.tenant_id,
-        name=original_filename,
         department=department_clean,
-        row_count=profile_data["row_count"],
-        file_path=final_file_path
-    )
-    db.add(dataset)
-    db.flush()
-
-    dataset_schema = DatasetSchema(
-        dataset_id=dataset.id,
-        columns_metadata=profile_data["columns_metadata"],
-        kpis_extracted=profile_data["kpis_extracted"],
-        trends_detected=profile_data["trends_detected"],
-        relationships=profile_data["relationships"]
-    )
-    db.add(dataset_schema)
-    db.commit()
-    db.refresh(dataset)
-
-    # Index into ChromaDB Vector Store
-    vector_memory_store.index_dataset_metadata(
-        tenant_id=current_user.tenant_id,
-        dataset_id=dataset.id,
-        department=department_clean,
-        profile_data=profile_data
+        filename=original_filename,
+        source_file_path=staged_path,
+        target_file_path=final_file_path,
+        confirmed_mapping=req.confirmed_mapping,
+        db=db
     )
 
-    return dataset
+    if sync:
+        job_manager._run_ingestion_worker(
+            job_id=job.id,
+            tenant_id=current_user.tenant_id,
+            department=department_clean,
+            filename=original_filename,
+            source_file_path=staged_path,
+            target_file_path=final_file_path,
+            confirmed_mapping=req.confirmed_mapping,
+            db_session=db
+        )
+        db.refresh(job)
+
+    return job
 
 
-@router.post("/upload", response_model=DatasetResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/upload", response_model=IngestionJobResponse, status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit(settings.RATE_LIMIT_INGEST)
 async def upload_csv_dataset(
+
+    request: Request,
     department: str = Form(...),
     file: UploadFile = File(...),
+    sync: bool = Query(False, description="Run synchronously if True (default: background job)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -163,63 +142,83 @@ async def upload_csv_dataset(
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are supported")
 
-    # Ensure storage dir exists
-    tenant_dir = os.path.join(DATA_STORAGE_DIR, current_user.tenant_id)
-    os.makedirs(tenant_dir, exist_ok=True)
+    # Save to staging
+    tenant_stage_dir = os.path.join(STAGING_DIR, current_user.tenant_id)
+    os.makedirs(tenant_stage_dir, exist_ok=True)
+    temp_file_id = str(uuid.uuid4())
+    staged_path = os.path.join(tenant_stage_dir, f"{temp_file_id}_{file.filename}")
 
-    file_path = os.path.join(tenant_dir, f"{department_clean}_{file.filename}")
-    with open(file_path, "wb") as buffer:
+    with open(staged_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # Ingestion Pipeline: Clean, Schema Detect, KPI & Trend Generation
-    try:
-        proposal = SchemaIntelligenceEngine.propose_schema_mapping(file_path, department_clean)
-        confirmed_map = {item["user_column"]: item["proposed_canonical"] for item in proposal["proposed_mappings"]}
-        
-        df = pd.read_csv(file_path)
-        rename_map = {orig: target for orig, target in confirmed_map.items() if target and target != "ignore" and orig in df.columns}
-        if rename_map:
-            df = df.rename(columns=rename_map)
-        df.to_csv(file_path, index=False)
+    proposal = SchemaIntelligenceEngine.propose_schema_mapping(staged_path, department_clean)
+    confirmed_map = {item["user_column"]: item["proposed_canonical"] for item in proposal["proposed_mappings"]}
 
-        profile_data = DataProfiler.profile_csv(file_path, department_clean)
-        profile_data["kpis_extracted"]["confirmed_mapping"] = confirmed_map
-    except Exception as e:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        raise HTTPException(status_code=400, detail=f"Failed to process CSV: {str(e)}")
+    tenant_dir = os.path.join(DATA_STORAGE_DIR, current_user.tenant_id)
+    os.makedirs(tenant_dir, exist_ok=True)
+    final_file_path = os.path.join(tenant_dir, f"{department_clean}_{file.filename}")
 
-    # Store into PostgreSQL
-    dataset = Dataset(
+    job = job_manager.create_and_enqueue_job(
         tenant_id=current_user.tenant_id,
-        name=file.filename,
         department=department_clean,
-        row_count=profile_data["row_count"],
-        file_path=file_path
-    )
-    db.add(dataset)
-    db.flush()
-
-    dataset_schema = DatasetSchema(
-        dataset_id=dataset.id,
-        columns_metadata=profile_data["columns_metadata"],
-        kpis_extracted=profile_data["kpis_extracted"],
-        trends_detected=profile_data["trends_detected"],
-        relationships=profile_data["relationships"]
-    )
-    db.add(dataset_schema)
-    db.commit()
-    db.refresh(dataset)
-
-    # Index into ChromaDB Vector Store
-    vector_memory_store.index_dataset_metadata(
-        tenant_id=current_user.tenant_id,
-        dataset_id=dataset.id,
-        department=department_clean,
-        profile_data=profile_data
+        filename=file.filename,
+        source_file_path=staged_path,
+        target_file_path=final_file_path,
+        confirmed_mapping=confirmed_map,
+        db=db
     )
 
-    return dataset
+    if sync:
+        job_manager._run_ingestion_worker(
+            job_id=job.id,
+            tenant_id=current_user.tenant_id,
+            department=department_clean,
+            filename=file.filename,
+            source_file_path=staged_path,
+            target_file_path=final_file_path,
+            confirmed_mapping=confirmed_map,
+            db_session=db
+        )
+        db.refresh(job)
+
+    return job
+
+
+@router.get("/jobs", response_model=List[IngestionJobResponse])
+def list_ingestion_jobs(
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Lists background ingestion jobs for current tenant."""
+    return job_manager.list_tenant_jobs(current_user.tenant_id, db, limit=limit)
+
+
+@router.get("/jobs/{job_id}", response_model=IngestionJobResponse)
+def get_ingestion_job_status(
+    job_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Returns real-time status & progress of a background ingestion job (checking Redis + SQL)."""
+    # 1. Ultra-fast Redis status check
+    cached_state = cache_manager.get_job_state(job_id)
+
+    # 2. Database lookup
+    job = job_manager.get_job_status(job_id, db)
+    if not job:
+        raise HTTPException(status_code=404, detail="Ingestion job not found")
+
+    if job.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=403, detail="Access forbidden to job")
+
+    if cached_state and isinstance(cached_state, dict):
+        job.progress = cached_state.get("progress", job.progress)
+        job.stage = cached_state.get("stage", job.stage)
+        job.status = cached_state.get("status", job.status)
+
+    return job
+
 
 @router.get("/datasets", response_model=List[DatasetResponse])
 def list_tenant_datasets(
@@ -227,6 +226,7 @@ def list_tenant_datasets(
     current_user: User = Depends(get_current_user)
 ):
     return db.query(Dataset).filter(Dataset.tenant_id == current_user.tenant_id).all()
+
 
 @router.get("/datasets/{dataset_id}", response_model=DatasetResponse)
 def get_dataset_details(

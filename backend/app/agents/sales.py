@@ -71,7 +71,7 @@ class SalesAgent(BaseDepartmentAgent):
                 except Exception:
                     pass
 
-            cat_cols = [c for c in df_filtered.select_dtypes(include=["object", "str"]).columns if c not in [date_col, 'month_year', 'month_str', 'parsed_date']]
+            cat_cols = [c for c in df_filtered.select_dtypes(include=["object"]).columns if c not in [date_col, 'month_year', 'month_str', 'parsed_date']]
             if cat_cols:
                 grp_col = cat_cols[0]
                 top_performer = df_filtered.groupby(grp_col)[rev_col].sum().sort_values(ascending=False)

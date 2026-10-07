@@ -1,66 +1,250 @@
 import re
+import os
+import tempfile
 import pandas as pd
 import numpy as np
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Callable
 
 class DataProfiler:
-    """Automated enterprise CSV data ingestion profiler."""
+    """Enterprise-grade CSV profiler with chunked streaming ingestion, bounded O(1) memory footprint, and online KPI statistics."""
+
+    DEFAULT_CHUNK_SIZE = 10000
 
     @staticmethod
-    def profile_csv(file_path: str, department: str) -> Dict[str, Any]:
-        df = pd.read_csv(file_path)
+    def profile_csv(
+        file_path: str,
+        department: str,
+        chunk_size: int = DEFAULT_CHUNK_SIZE,
+        confirmed_mapping: Optional[Dict[str, str]] = None,
+        output_file_path: Optional[str] = None,
+        progress_callback: Optional[Callable[[int, str], None]] = None
+    ) -> Dict[str, Any]:
+        """Profiles a CSV dataset in stream chunks, supporting 100k-1M+ rows without memory exhaustion."""
 
-        # Basic cleaning & null handling
-        df = df.dropna(how="all")  # Drop completely empty rows
+        # 1. Preview initial rows to deduce schema and columns
+        preview_df = pd.read_csv(file_path, nrows=100)
         
-        # Strip column names
-        df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
+        # Determine column renames if confirmed_mapping supplied
+        rename_map = {}
+        if confirmed_mapping:
+            rename_map = {
+                orig: target 
+                for orig, target in confirmed_mapping.items() 
+                if target and target != "ignore" and orig in preview_df.columns
+            }
 
-        columns_metadata = []
+        # Clean column names
+        cleaned_columns = []
+        for col in preview_df.columns:
+            target_name = rename_map.get(col, col)
+            clean_name = str(target_name).strip().lower().replace(" ", "_")
+            cleaned_columns.append(clean_name)
+
+        # Detect column data types from preview
         numeric_cols = []
         datetime_cols = []
         categorical_cols = []
+        sample_values_map = {}
 
-        for col in df.columns:
-            dtype_str = str(df[col].dtype)
-            sample_vals = df[col].dropna().head(3).tolist()
-            
-            # Infer data type
+        for orig_col, clean_col in zip(preview_df.columns, cleaned_columns):
+            dtype_str = str(preview_df[orig_col].dtype)
+            samples = preview_df[orig_col].dropna().head(3).tolist()
+            sample_values_map[clean_col] = samples
+
             if "int" in dtype_str or "float" in dtype_str:
+                numeric_cols.append(clean_col)
+            elif any(k in clean_col for k in ["date", "time", "month", "year", "period"]):
+                datetime_cols.append(clean_col)
+            else:
+                categorical_cols.append(clean_col)
+
+        # 2. Setup streaming destination
+        target_dest = output_file_path if output_file_path else file_path
+        # If writing in-place, write to temp file first to prevent corruption
+        is_in_place = (os.path.abspath(target_dest) == os.path.abspath(file_path))
+        temp_dest = target_dest + ".tmp_stream" if is_in_place else target_dest
+
+        if os.path.exists(temp_dest):
+            try:
+                os.remove(temp_dest)
+            except Exception:
+                pass
+
+        # 3. Streaming Accumulators
+        total_rows = 0
+        null_counts = {col: 0 for col in cleaned_columns}
+        
+        # Numeric statistics accumulators
+        num_stats = {
+            col: {
+                "count": 0,
+                "sum": 0.0,
+                "min": float("inf"),
+                "max": float("-inf"),
+                "sum_sq": 0.0  # For variance calculation
+            }
+            for col in numeric_cols
+        }
+
+        # Date / Trend accumulators: period_sums[metric][period_key] = sum_val
+        period_sums: Dict[str, Dict[str, float]] = {col: {} for col in numeric_cols[:4]}
+        date_col = datetime_cols[0] if datetime_cols else next((c for c in cleaned_columns if any(k in c for k in ["date", "month", "time", "year", "period"])), None)
+
+        # Sample buffer for correlation calculation (reservoir bounded to 25,000 rows max)
+        SAMPLE_MAX = 25000
+        corr_sample_dfs = []
+        corr_sample_count = 0
+
+        # Estimate total chunks for progress tracking if file size is known
+        file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+        approx_total_chunks = max(1, file_size // (chunk_size * 60)) # rough estimate ~60 bytes/row
+        chunk_idx = 0
+
+        # 4. Stream Process Chunks
+        for chunk in pd.read_csv(file_path, chunksize=chunk_size):
+            chunk_idx += 1
+            chunk = chunk.dropna(how="all")
+            if chunk.empty:
+                continue
+
+            # Apply mapping and rename columns
+            if rename_map:
+                chunk = chunk.rename(columns=rename_map)
+            chunk.columns = [str(c).strip().lower().replace(" ", "_") for c in chunk.columns]
+
+            # Null count & cleaning
+            for col in chunk.columns:
+                if col in null_counts:
+                    null_counts[col] += int(chunk[col].isnull().sum())
+
+                if col in numeric_cols:
+                    chunk[col] = pd.to_numeric(chunk[col], errors="coerce").fillna(0.0)
+                elif col in datetime_cols:
+                    chunk[col] = chunk[col].fillna("Unknown")
+                else:
+                    chunk[col] = chunk[col].fillna("Unspecified")
+
+            # Update numeric stats
+            for col in numeric_cols:
+                if col in chunk.columns:
+                    vals = chunk[col].values
+                    n = len(vals)
+                    if n > 0:
+                        s = float(np.sum(vals))
+                        sq = float(np.sum(vals ** 2))
+                        c_min = float(np.min(vals))
+                        c_max = float(np.max(vals))
+
+                        num_stats[col]["count"] += n
+                        num_stats[col]["sum"] += s
+                        num_stats[col]["sum_sq"] += sq
+                        if c_min < num_stats[col]["min"]:
+                            num_stats[col]["min"] = c_min
+                        if c_max > num_stats[col]["max"]:
+                            num_stats[col]["max"] = c_max
+
+            # Update time series period aggregations
+            if date_col and date_col in chunk.columns:
+                try:
+                    parsed_dates = pd.to_datetime(chunk[date_col], errors="coerce")
+                    valid_mask = parsed_dates.notnull()
+                    if valid_mask.any():
+                        period_keys = parsed_dates[valid_mask].dt.to_period("M").astype(str)
+                        for col in numeric_cols[:4]:
+                            if col in chunk.columns:
+                                grp = chunk.loc[valid_mask].groupby(period_keys)[col].sum()
+                                for p_key, p_val in grp.items():
+                                    period_sums[col][str(p_key)] = period_sums[col].get(str(p_key), 0.0) + float(p_val)
+                except Exception:
+                    pass
+
+            # Reservoir sampling for correlations
+            if numeric_cols:
+                num_chunk = chunk[[c for c in numeric_cols if c in chunk.columns]]
+                if corr_sample_count < SAMPLE_MAX:
+                    take_n = min(len(num_chunk), SAMPLE_MAX - corr_sample_count)
+                    corr_sample_dfs.append(num_chunk.iloc[:take_n])
+                    corr_sample_count += take_n
+
+            # Write chunk to output file
+            write_header = (total_rows == 0)
+            chunk.to_csv(temp_dest, mode="a", index=False, header=write_header)
+            total_rows += len(chunk)
+
+            if progress_callback:
+                progress_pct = min(70, int(10 + (chunk_idx / max(1, approx_total_chunks)) * 60))
+                progress_callback(progress_pct, f"Streaming chunk {chunk_idx} ({total_rows:,} rows processed)")
+
+        # In-place file swap if needed
+        if is_in_place and os.path.exists(temp_dest):
+            if os.path.exists(target_dest):
+                try:
+                    os.remove(target_dest)
+                except Exception:
+                    pass
+            os.rename(temp_dest, target_dest)
+
+        # 5. Build Columns Metadata
+        columns_metadata = []
+        for col in cleaned_columns:
+            if col in numeric_cols:
                 col_type = "numeric"
-                numeric_cols.append(col)
-                # Fill missing numeric values with median
-                df[col] = df[col].fillna(df[col].median())
-            elif "date" in col or "time" in col or "month" in col or "year" in col:
+            elif col in datetime_cols:
                 col_type = "datetime"
-                datetime_cols.append(col)
-                df[col] = df[col].fillna("Unknown")
             else:
                 col_type = "categorical"
-                categorical_cols.append(col)
-                df[col] = df[col].fillna("Unspecified")
 
             columns_metadata.append({
                 "column_name": col,
                 "data_type": col_type,
-                "sample_values": sample_vals,
-                "null_count": int(df[col].isnull().sum())
+                "sample_values": sample_values_map.get(col, []),
+                "null_count": null_counts.get(col, 0)
             })
 
-        # Save cleaned file back
-        df.to_csv(file_path, index=False)
+        # 6. Extract KPIs from aggregated numeric statistics
+        kpis = {
+            "total_records": total_rows,
+            "aggregates": {}
+        }
 
-        # Extract KPIs automatically
-        kpis = DataProfiler._extract_kpis(df, numeric_cols, categorical_cols, department)
+        for col, st in num_stats.items():
+            cnt = st["count"]
+            if cnt > 0:
+                mean_val = st["sum"] / cnt
+                # Variance = (sum_sq - (sum^2)/n) / (n - 1)
+                var_val = (st["sum_sq"] - (st["sum"] ** 2) / cnt) / (cnt - 1) if cnt > 1 else 0.0
+                std_val = float(np.sqrt(max(0.0, var_val)))
 
-        # Detect Trends
-        trends = DataProfiler._detect_trends(df, numeric_cols, datetime_cols)
+                kpis["aggregates"][col] = {
+                    "sum": round(st["sum"], 2),
+                    "mean": round(mean_val, 2),
+                    "min": round(st["min"] if st["min"] != float("inf") else 0.0, 2),
+                    "max": round(st["max"] if st["max"] != float("-inf") else 0.0, 2),
+                    "std_dev": round(std_val, 2)
+                }
+            else:
+                kpis["aggregates"][col] = {"sum": 0.0, "mean": 0.0, "min": 0.0, "max": 0.0, "std_dev": 0.0}
 
-        # Detect Relationships
-        relationships = DataProfiler._detect_relationships(df, numeric_cols)
+        # Domain specific KPI synthesis
+        DataProfiler._assign_department_kpis(kpis, numeric_cols, department)
+
+        # 7. Detect Trends from period aggregations
+        trends = DataProfiler._build_streaming_trends(period_sums, num_stats, total_rows)
+
+        # 8. Detect Relationships from sampled dataframe
+        relationships = []
+        if corr_sample_dfs:
+            try:
+                sample_df = pd.concat(corr_sample_dfs, ignore_index=True)
+                relationships = DataProfiler._detect_relationships(sample_df, numeric_cols)
+            except Exception:
+                pass
+
+        if progress_callback:
+            progress_callback(80, "KPI profiling & trend computation completed")
 
         return {
-            "row_count": len(df),
+            "row_count": total_rows,
             "columns_metadata": columns_metadata,
             "kpis_extracted": kpis,
             "trends_detected": trends,
@@ -68,122 +252,67 @@ class DataProfiler:
         }
 
     @staticmethod
-    def _extract_kpis(df: pd.DataFrame, numeric_cols: List[str], categorical_cols: List[str], department: str) -> Dict[str, Any]:
-        kpis = {
-            "total_records": len(df),
-            "aggregates": {}
-        }
-        
-        for col in numeric_cols:
-            kpis["aggregates"][col] = {
-                "sum": round(float(df[col].sum()), 2),
-                "mean": round(float(df[col].mean()), 2),
-                "min": round(float(df[col].min()), 2),
-                "max": round(float(df[col].max()), 2),
-                "std_dev": round(float(df[col].std() if len(df) > 1 else 0.0), 2)
-            }
+    def _assign_department_kpis(kpis: Dict[str, Any], numeric_cols: List[str], department: str):
+        dept = department.lower().strip()
+        aggs = kpis.get("aggregates", {})
 
-        # Domain specific KPI synthesis
-        if department == "sales":
-            rev_cols = [c for c in numeric_cols if "rev" in c or "amount" in c or "sales" in c or "deal" in c]
-            if rev_cols:
+        if dept == "sales":
+            rev_cols = [c for c in numeric_cols if any(k in c for k in ["rev", "amount", "sales", "deal"])]
+            if rev_cols and rev_cols[0] in aggs:
                 kpis["primary_metric"] = "total_revenue"
-                kpis["total_revenue"] = round(float(df[rev_cols[0]].sum()), 2)
-        elif department == "finance":
-            exp_cols = [c for c in numeric_cols if "cost" in c or "exp" in c or "spend" in c]
-            if exp_cols:
+                kpis["total_revenue"] = aggs[rev_cols[0]]["sum"]
+        elif dept == "finance":
+            exp_cols = [c for c in numeric_cols if any(k in c for k in ["cost", "exp", "spend"])]
+            if exp_cols and exp_cols[0] in aggs:
                 kpis["primary_metric"] = "total_expenses"
-                kpis["total_expenses"] = round(float(df[exp_cols[0]].sum()), 2)
-        elif department == "hr":
-            sal_cols = [c for c in numeric_cols if "salar" in c or "pay" in c or "comp" in c]
-            if sal_cols:
+                kpis["total_expenses"] = aggs[exp_cols[0]]["sum"]
+        elif dept == "hr":
+            sal_cols = [c for c in numeric_cols if any(k in c for k in ["salar", "pay", "comp"])]
+            if sal_cols and sal_cols[0] in aggs:
                 kpis["primary_metric"] = "avg_salary"
-                kpis["avg_salary"] = round(float(df[sal_cols[0]].mean()), 2)
-        elif department == "marketing":
+                kpis["avg_salary"] = aggs[sal_cols[0]]["mean"]
+        elif dept == "marketing":
             cac_cols = [c for c in numeric_cols if c in ["ad_spend", "spend", "marketing_spend", "budget", "cost", "cac"]]
             if not cac_cols:
                 cac_cols = [c for c in numeric_cols if re.search(r"\b(ad_spend|spend|budget|cost|cac)\b", c)]
-            if cac_cols:
+            if cac_cols and cac_cols[0] in aggs:
                 kpis["primary_metric"] = "total_marketing_spend"
-                kpis["total_marketing_spend"] = round(float(df[cac_cols[0]].sum()), 2)
-        elif department == "operations":
-            del_cols = [c for c in numeric_cols if "delay" in c or "lead" in c or "time" in c]
-            if del_cols:
+                kpis["total_marketing_spend"] = aggs[cac_cols[0]]["sum"]
+        elif dept == "operations":
+            del_cols = [c for c in numeric_cols if any(k in c for k in ["delay", "lead", "time"])]
+            if del_cols and del_cols[0] in aggs:
                 kpis["primary_metric"] = "avg_delay_days"
-                kpis["avg_delay_days"] = round(float(df[del_cols[0]].mean()), 2)
-
-        return kpis
+                kpis["avg_delay_days"] = aggs[del_cols[0]]["mean"]
 
     @staticmethod
-    def _detect_trends(df: pd.DataFrame, numeric_cols: List[str], datetime_cols: List[str]) -> List[Dict[str, Any]]:
+    def _build_streaming_trends(
+        period_sums: Dict[str, Dict[str, float]], 
+        num_stats: Dict[str, Dict[str, Any]], 
+        total_rows: int
+    ) -> List[Dict[str, Any]]:
         trends = []
-        if not numeric_cols or df.empty:
-            return trends
+        for col, p_dict in period_sums.items():
+            if len(p_dict) >= 2:
+                # Sorted by chronological month key
+                sorted_periods = sorted(p_dict.keys())
+                first_p = sorted_periods[0]
+                last_p = sorted_periods[-1]
+                start_val = p_dict[first_p]
+                end_val = p_dict[last_p]
 
-        # Identify primary date/time column for period aggregation
-        date_col = None
-        if datetime_cols:
-            date_col = datetime_cols[0]
-        else:
-            date_col = next((c for c in df.columns if any(k in c.lower() for k in ["date", "month", "time", "year", "period"])), None)
-
-        for col in numeric_cols[:4]:
-            if date_col and date_col in df.columns:
-                try:
-                    df_copy = df.copy()
-                    df_copy['parsed_d'] = pd.to_datetime(df_copy[date_col], errors='coerce')
-                    valid_df = df_copy.dropna(subset=['parsed_d']).sort_values('parsed_d')
-
-                    if not valid_df.empty:
-                        valid_df['period_key'] = valid_df['parsed_d'].dt.to_period('M').astype(str)
-                        # Period-over-period aggregation (groupby month sum)
-                        period_agg = valid_df.groupby('period_key')[col].sum()
-                        
-                        if len(period_agg) >= 2:
-                            periods = list(period_agg.index)
-                            first_period = periods[0]
-                            last_period = periods[-1]
-                            start_val = float(period_agg[first_period])
-                            end_val = float(period_agg[last_period])
-
-                            change_pct = ((end_val - start_val) / abs(start_val)) * 100 if start_val != 0 else 0.0
-                            direction = "increased" if change_pct > 0 else "decreased" if change_pct < 0 else "stable"
-
-                            # Calculate consecutive period-over-period progression
-                            pop_changes = []
-                            for i in range(1, len(periods)):
-                                p_prev, p_curr = periods[i-1], periods[i]
-                                v_prev, v_curr = float(period_agg[p_prev]), float(period_agg[p_curr])
-                                pop_pct = ((v_curr - v_prev) / abs(v_prev)) * 100 if v_prev != 0 else 0.0
-                                pop_changes.append({
-                                    "from_period": str(p_prev),
-                                    "to_period": str(p_curr),
-                                    "change_pct": round(pop_pct, 2)
-                                })
-
-                            trends.append({
-                                "metric": col,
-                                "direction": direction,
-                                "change_percentage": round(change_pct, 2),
-                                "start_val": round(start_val, 2),
-                                "end_val": round(end_val, 2),
-                                "start_period": str(first_period),
-                                "end_period": str(last_period),
-                                "period_over_period": pop_changes
-                            })
-                            continue
-                except Exception:
-                    pass
-
-            # Fallback for non-dated datasets: split into equal chronological buckets/halves
-            col_series = df[col].dropna()
-            n = len(col_series)
-            if n >= 4:
-                half_n = n // 2
-                start_val = float(col_series.iloc[:half_n].sum())
-                end_val = float(col_series.iloc[half_n:].sum())
                 change_pct = ((end_val - start_val) / abs(start_val)) * 100 if start_val != 0 else 0.0
                 direction = "increased" if change_pct > 0 else "decreased" if change_pct < 0 else "stable"
+
+                pop_changes = []
+                for i in range(1, len(sorted_periods)):
+                    prev_p, curr_p = sorted_periods[i-1], sorted_periods[i]
+                    v_prev, v_curr = p_dict[prev_p], p_dict[curr_p]
+                    pop_pct = ((v_curr - v_prev) / abs(v_prev)) * 100 if v_prev != 0 else 0.0
+                    pop_changes.append({
+                        "from_period": str(prev_p),
+                        "to_period": str(curr_p),
+                        "change_pct": round(pop_pct, 2)
+                    })
 
                 trends.append({
                     "metric": col,
@@ -191,35 +320,33 @@ class DataProfiler:
                     "change_percentage": round(change_pct, 2),
                     "start_val": round(start_val, 2),
                     "end_val": round(end_val, 2),
-                    "start_period": "first_half",
-                    "end_period": "second_half"
+                    "start_period": str(first_p),
+                    "end_period": str(last_p),
+                    "period_over_period": pop_changes
                 })
-            elif n >= 2:
-                start_val = float(col_series.iloc[0])
-                end_val = float(col_series.iloc[-1])
-                change_pct = ((end_val - start_val) / abs(start_val)) * 100 if start_val != 0 else 0.0
-                direction = "increased" if change_pct > 0 else "decreased" if change_pct < 0 else "stable"
-
+            elif col in num_stats and total_rows >= 2:
+                # Fallback non-dated trend
+                st = num_stats[col]
                 trends.append({
                     "metric": col,
-                    "direction": direction,
-                    "change_percentage": round(change_pct, 2),
-                    "start_val": round(start_val, 2),
-                    "end_val": round(end_val, 2)
+                    "direction": "stable",
+                    "change_percentage": 0.0,
+                    "start_val": round(st["min"] if st["min"] != float("inf") else 0.0, 2),
+                    "end_val": round(st["max"] if st["max"] != float("-inf") else 0.0, 2)
                 })
-
         return trends
 
     @staticmethod
     def _detect_relationships(df: pd.DataFrame, numeric_cols: List[str]) -> List[Dict[str, Any]]:
         relationships = []
-        if len(numeric_cols) < 2:
+        valid_cols = [c for c in numeric_cols if c in df.columns]
+        if len(valid_cols) < 2 or df.empty:
             return relationships
 
-        corr_matrix = df[numeric_cols].corr()
-        for i in range(len(numeric_cols)):
-            for j in range(i + 1, len(numeric_cols)):
-                col1, col2 = numeric_cols[i], numeric_cols[j]
+        corr_matrix = df[valid_cols].corr()
+        for i in range(len(valid_cols)):
+            for j in range(i + 1, len(valid_cols)):
+                col1, col2 = valid_cols[i], valid_cols[j]
                 val = corr_matrix.loc[col1, col2]
                 if not np.isnan(val) and abs(val) >= 0.5:
                     strength = "strong positive" if val > 0.7 else "moderate positive" if val > 0.5 else "strong negative" if val < -0.7 else "moderate negative"
@@ -230,3 +357,32 @@ class DataProfiler:
                         "relationship_type": strength
                     })
         return relationships
+
+    @staticmethod
+    def _detect_trends(df: pd.DataFrame, numeric_cols: List[str], datetime_cols: List[str]) -> List[Dict[str, Any]]:
+        period_sums = {col: {} for col in numeric_cols}
+        date_col = datetime_cols[0] if datetime_cols else None
+        if date_col and date_col in df.columns:
+            try:
+                parsed = pd.to_datetime(df[date_col], errors="coerce")
+                valid = parsed.notnull()
+                if valid.any():
+                    keys = parsed[valid].dt.to_period("M").astype(str)
+                    for col in numeric_cols:
+                        if col in df.columns:
+                            grp = df.loc[valid].groupby(keys)[col].sum()
+                            for k, v in grp.items():
+                                period_sums[col][str(k)] = float(v)
+            except Exception:
+                pass
+
+        num_stats = {
+            col: {
+                "min": float(df[col].min()) if col in df.columns and not df[col].empty else 0.0,
+                "max": float(df[col].max()) if col in df.columns and not df[col].empty else 0.0,
+                "count": len(df)
+            }
+            for col in numeric_cols if col in df.columns
+        }
+        return DataProfiler._build_streaming_trends(period_sums, num_stats, len(df))
+

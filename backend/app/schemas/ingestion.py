@@ -47,3 +47,22 @@ class SchemaConfirmationRequest(BaseModel):
     temp_file_id: str
     department: str
     confirmed_mapping: Dict[str, str]
+
+class IngestionJobResponse(BaseModel):
+    id: str
+    tenant_id: str
+    filename: str
+    department: str
+    status: str
+    progress: int
+    stage: str
+    row_count: int
+    dataset_id: Optional[str] = None
+    error_message: Optional[str] = None
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+    job_metadata: Optional[Dict[str, Any]] = None
+    dataset: Optional[DatasetResponse] = None
+
+    model_config = ConfigDict(from_attributes=True)
+

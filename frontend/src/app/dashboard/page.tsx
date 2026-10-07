@@ -51,6 +51,12 @@ export default function ExecutiveDashboard() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState('');
   const [uploadedDatasets, setUploadedDatasets] = useState<any[]>([]);
+  const [jobProgress, setJobProgress] = useState<{
+    jobId: string;
+    progress: number;
+    stage: string;
+    status: string;
+  } | null>(null);
 
   // Schema Intelligence Modal State
   const [schemaProposal, setSchemaProposal] = useState<any | null>(null);
@@ -150,7 +156,48 @@ export default function ExecutiveDashboard() {
     fetchAlerts();
   }, [token, activeTab]);
 
-  // Real CSV Upload Handler
+  // Background Ingestion Job Polling Hook
+  const pollJobProgress = (jobId: string, authToken: string, dept: string) => {
+    const apiUrl = getApiUrl();
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/v1/ingest/jobs/${jobId}`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (res.ok) {
+          const job = await res.json();
+          setJobProgress({
+            jobId: job.id,
+            progress: job.progress || 0,
+            stage: job.stage || 'Processing...',
+            status: job.status
+          });
+
+          if (job.status === 'COMPLETED') {
+            clearInterval(interval);
+            setIsUploading(false);
+            setIsConfirmingSchema(false);
+            setUploadSuccess(`Successfully ingested '${job.filename}' (${job.row_count?.toLocaleString() || 0} rows) into ${dept.toUpperCase()} Enterprise Memory!`);
+            setFileToUpload(null);
+            setSchemaProposal(null);
+            fetchDatasets();
+            fetchAlerts();
+            setTimeout(() => setJobProgress(null), 4000);
+          } else if (job.status === 'FAILED') {
+            clearInterval(interval);
+            setIsUploading(false);
+            setIsConfirmingSchema(false);
+            setApiError(job.error_message || 'Ingestion job failed in background queue.');
+            setTimeout(() => setJobProgress(null), 4000);
+          }
+        }
+      } catch (err) {
+        // Retry polling on temporary network hiccup
+      }
+    }, 450);
+  };
+
+  // Real CSV Upload Handler via Background Worker Queue
   const handleFileUpload = async () => {
     if (!fileToUpload) {
       setApiError('Please select a CSV file first.');
@@ -176,22 +223,22 @@ export default function ExecutiveDashboard() {
         body: formData
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setUploadSuccess(`Successfully ingested '${data.name}' (${data.row_count} rows) into ${selectedDept.toUpperCase()} Enterprise Memory!`);
-        setFileToUpload(null);
-        fetchDatasets();
-        fetch(`${getApiUrl()}/api/v1/sentinel/trigger`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` }
+      if (res.status === 202 || res.ok) {
+        const jobData = await res.json();
+        setJobProgress({
+          jobId: jobData.id,
+          progress: jobData.progress || 10,
+          stage: jobData.stage || 'Queued in background worker pool',
+          status: jobData.status
         });
+        pollJobProgress(jobData.id, token, selectedDept);
       } else {
         const errData = await res.json();
         setApiError(errData.detail || 'Failed to upload CSV file.');
+        setIsUploading(false);
       }
     } catch (err: any) {
       setApiError(`Could not connect to backend server at ${getApiUrl()}. Make sure your backend server is running on port 8000.`);
-    } finally {
       setIsUploading(false);
     }
   };
@@ -242,7 +289,7 @@ export default function ExecutiveDashboard() {
     }
   };
 
-  // Confirm Schema Mapping & Ingest Dataset
+  // Confirm Schema Mapping & Ingest Dataset via Background Queue
   const handleConfirmAndIngest = async () => {
     if (!schemaProposal || !token) return;
     setIsConfirmingSchema(true);
@@ -262,26 +309,27 @@ export default function ExecutiveDashboard() {
         })
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setUploadSuccess(`Successfully ingested '${data.name}' (${data.row_count} rows) with verified AI schema mapping into ${selectedDept.toUpperCase()} Enterprise Memory!`);
-        setSchemaProposal(null);
-        setFileToUpload(null);
-        fetchDatasets();
-        fetch(`${getApiUrl()}/api/v1/sentinel/trigger`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` }
+      if (res.status === 202 || res.ok) {
+        const jobData = await res.json();
+        setJobProgress({
+          jobId: jobData.id,
+          progress: jobData.progress || 10,
+          stage: jobData.stage || 'Queued in background worker pool',
+          status: jobData.status
         });
+        setSchemaProposal(null);
+        pollJobProgress(jobData.id, token, selectedDept);
       } else {
         const errData = await res.json();
         setApiError(errData.detail || 'Failed to confirm schema mapping.');
+        setIsConfirmingSchema(false);
       }
     } catch (err: any) {
       setApiError('Error confirming schema mapping.');
-    } finally {
       setIsConfirmingSchema(false);
     }
   };
+
 
   // Real AI Query Handler
   const handleExecuteQuery = async (e: React.FormEvent) => {
@@ -614,15 +662,21 @@ export default function ExecutiveDashboard() {
                 </p>
               </div>
 
-              {queryResult && (
-                <button
-                  onClick={handleExportReport}
-                  className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-semibold flex items-center gap-2 transition-all"
-                >
-                  <Download className="w-3.5 h-3.5 text-accent-cyan" /> Export Executive Report (.TXT)
-                </button>
-              )}
+              <div className="flex items-center gap-3">
+                <div className="px-3 py-1.5 rounded-lg bg-obsidian-850 border border-accent-emerald/30 text-[11px] font-mono text-accent-emerald flex items-center gap-1.5 shadow-sm">
+                  <Sparkles className="w-3 h-3 text-accent-emerald" /> Redis Cache Active
+                </div>
+                {queryResult && (
+                  <button
+                    onClick={handleExportReport}
+                    className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-semibold flex items-center gap-2 transition-all"
+                  >
+                    <Download className="w-3.5 h-3.5 text-accent-cyan" /> Export Executive Report (.PDF)
+                  </button>
+                )}
+              </div>
             </div>
+
 
             <form onSubmit={handleExecuteQuery} className="relative">
               <input
@@ -885,11 +939,34 @@ export default function ExecutiveDashboard() {
                 </button>
               </div>
 
+              {jobProgress && (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-5 rounded-xl bg-obsidian-850 border border-accent-cyan/40 space-y-3 shadow-xl">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-white flex items-center gap-2 font-mono">
+                      <RefreshCw className="w-3.5 h-3.5 text-accent-cyan animate-spin" />
+                      {jobProgress.stage}
+                    </span>
+                    <span className="font-mono text-accent-cyan font-bold">{jobProgress.progress}%</span>
+                  </div>
+                  <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                    <div 
+                      className="bg-gradient-to-r from-accent-cyan to-accent-emerald h-full transition-all duration-300 ease-out" 
+                      style={{ width: `${jobProgress.progress}%` }}
+                    />
+                  </div>
+                  <div className="text-[11px] text-neutral-400 flex items-center justify-between font-mono">
+                    <span>Background Worker Queue: Streaming Ingestion</span>
+                    <span className="text-accent-cyan uppercase">{jobProgress.status}</span>
+                  </div>
+                </motion.div>
+              )}
+
               {uploadSuccess && (
                 <div className="p-4 rounded-xl bg-accent-emerald/10 border border-accent-emerald/30 text-accent-emerald text-xs flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4" /> {uploadSuccess}
                 </div>
               )}
+
 
               {/* Interactive AI Schema Intelligence Confirmation Modal */}
               {schemaProposal && (

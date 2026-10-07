@@ -70,3 +70,23 @@ def check_ollama_status():
         "active_llm": "Built-in Deterministic Engine",
         "info": "Start Ollama locally ('ollama run llama3') to enable Llama 3 text synthesis."
     }
+
+@router.get("/cache-stats")
+def get_redis_cache_stats():
+    """Returns Redis cache hit/miss metrics and connectivity status."""
+    from app.memory.redis_cache import cache_manager
+    return cache_manager.get_cache_stats()
+
+@router.post("/cache-clear")
+def clear_redis_cache(
+    current_user: User = Depends(get_current_user)
+):
+    """Flushes cached queries, metrics, and KPI summaries for current tenant."""
+    from app.memory.redis_cache import cache_manager
+    cache_manager.invalidate_tenant_cache(current_user.tenant_id)
+    return {
+        "status": "cleared",
+        "tenant_id": current_user.tenant_id,
+        "message": "Tenant cache invalidated successfully"
+    }
+

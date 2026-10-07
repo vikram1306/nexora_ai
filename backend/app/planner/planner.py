@@ -7,9 +7,11 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.memory.enterprise_memory import EnterpriseMemoryManager
+from app.memory.redis_cache import cache_manager
 from app.schemas.agents import (
     PlannerTaskPlan, DepartmentAgentOutput, ExecutiveQueryResponse
 )
+
 from app.agents import (
     SalesAgent, FinanceAgent, HRAgent, MarketingAgent, OperationsAgent
 )
@@ -73,11 +75,11 @@ class PlannerAgent:
             is_out_of_domain=False
         )
 
-    def _execute_agent_threadsafe(self, dept_name: str, prompt: str) -> DepartmentAgentOutput:
-        """Helper to execute department agent in its database session."""
-        db_thread = self.db if self.db is not None else SessionLocal()
+    def _execute_agent_threadsafe(self, dept_name: str, prompt: str, db_override: Optional[Session] = None) -> DepartmentAgentOutput:
+        """Helper to execute department agent in an isolated thread-safe database session."""
+        db_use = db_override if db_override is not None else (self.db if self.db is not None else SessionLocal())
         try:
-            memory_thread = EnterpriseMemoryManager(db_thread, self.tenant_id)
+            memory_thread = EnterpriseMemoryManager(db_use, self.tenant_id)
             agent_map = {
                 "sales": SalesAgent(memory_thread),
                 "finance": FinanceAgent(memory_thread),
@@ -87,11 +89,27 @@ class PlannerAgent:
             }
             agent = agent_map[dept_name]
             return agent.execute(prompt)
-        finally:
-            if db_thread != self.db:
-                db_thread.close()
+        except Exception as e:
+            return DepartmentAgentOutput(
+                department=dept_name,
+                metrics=[],
+                sql_executed="-- Error during execution",
+                trends=[],
+                evidence=[f"Execution exception: {str(e)}"],
+                insights=[f"Agent failed with error: {str(e)}"],
+                confidence_score=0.0
+            )
 
-    def execute_query(self, prompt: str) -> ExecutiveQueryResponse:
+    def execute_query(self, prompt: str, bypass_cache: bool = False) -> ExecutiveQueryResponse:
+        # 1. Fast Redis Cache Lookup (< 2ms response)
+        if not bypass_cache:
+            cached = cache_manager.get_query_response(self.tenant_id, prompt)
+            if cached and isinstance(cached, dict):
+                try:
+                    return ExecutiveQueryResponse(**cached)
+                except Exception:
+                    pass
+
         plan = self.analyze_intent_and_plan(prompt)
 
         if plan.is_out_of_domain:
@@ -106,25 +124,24 @@ class PlannerAgent:
                 evidence_citations=["System Policy Enforcement: Non-enterprise domain query rejected."]
             )
 
-        # Execute agents in parallel with thread-safe DB sessions
+        # Execute agents: direct execution for single department, parallel ThreadPool for multi-department
         department_outputs: List[DepartmentAgentOutput] = []
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future_to_dept = {executor.submit(self._execute_agent_threadsafe, d, prompt): d for d in plan.target_departments}
-            for future in concurrent.futures.as_completed(future_to_dept):
-                dept_name = future_to_dept[future]
+        if len(plan.target_departments) == 1:
+            dept_name = plan.target_departments[0]
+            department_outputs.append(self._execute_agent_threadsafe(dept_name, prompt, self.db))
+        else:
+            bind = self.db.get_bind() if self.db is not None else None
+            def run_agent_in_isolated_session(d: str):
+                sess = Session(bind=bind) if bind is not None else SessionLocal()
                 try:
-                    res = future.result()
-                    department_outputs.append(res)
-                except Exception as e:
-                    department_outputs.append(DepartmentAgentOutput(
-                        department=dept_name,
-                        metrics=[],
-                        sql_executed="-- Error during execution",
-                        trends=[],
-                        evidence=[f"Execution exception: {str(e)}"],
-                        insights=[f"Agent failed with error: {str(e)}"],
-                        confidence_score=0.0
-                    ))
+                    return self._execute_agent_threadsafe(d, prompt, sess)
+                finally:
+                    sess.close()
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(plan.target_departments)) as executor:
+                future_to_dept = {executor.submit(run_agent_in_isolated_session, d): d for d in plan.target_departments}
+                for future in concurrent.futures.as_completed(future_to_dept):
+                    department_outputs.append(future.result())
 
         # Cross-Departmental EBITDA & Margin Calculation (ONLY if explicitly requested)
         ebitda_summary = self._calculate_cross_departmental_ebitda(prompt, department_outputs)
@@ -156,7 +173,7 @@ class PlannerAgent:
         # Build Chart Config for Recharts
         chart_config = self._build_chart_config(department_outputs)
 
-        return ExecutiveQueryResponse(
+        response = ExecutiveQueryResponse(
             prompt=prompt,
             is_out_of_domain=False,
             intent=plan.intent,
@@ -168,12 +185,21 @@ class PlannerAgent:
             chart_config=chart_config
         )
 
+        # Warm Redis query cache for this tenant
+        try:
+            cache_manager.set_query_response(self.tenant_id, prompt, response.model_dump(), ttl=600)
+        except Exception:
+            pass
+
+        return response
+
+
     def _synthesize_dynamic_llm_response(self, prompt: str, base_summary: str, department_outputs: List[DepartmentAgentOutput]) -> str:
         """Synthesizes dynamic LLM responses via Ollama Llama 3 while strictly preserving statistical accuracy and markdown glass card formatting."""
         try:
             clean_prompt = sanitize_text_for_prompt(prompt)
             clean_summary = sanitize_text_for_prompt(base_summary)
-            timeout_config = httpx.Timeout(1.5, connect=0.3)
+            timeout_config = httpx.Timeout(0.2, connect=0.08)
             with httpx.Client(timeout=timeout_config) as client:
                 ollama_req = {
                     "model": "llama3",
@@ -197,6 +223,7 @@ class PlannerAgent:
             pass
 
         return base_summary
+
 
 
     def _calculate_cross_departmental_ebitda(self, prompt: str, department_outputs: List[DepartmentAgentOutput]) -> Optional[str]:

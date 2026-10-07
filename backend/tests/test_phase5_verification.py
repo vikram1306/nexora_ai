@@ -62,7 +62,7 @@ def test_task17_confirm_and_ingest_pipeline(db_session, tmp_path):
     }
 
     res_confirm = client.post(
-        "/api/v1/ingest/confirm-and-ingest",
+        "/api/v1/ingest/confirm-and-ingest?sync=true",
         json={
             "temp_file_id": temp_file_id,
             "department": "marketing",
@@ -77,7 +77,9 @@ def test_task17_confirm_and_ingest_pipeline(db_session, tmp_path):
     assert dataset_data['row_count'] == 2
 
     # Verify DB record and confirmed schema info
-    ds_db = db_session.query(Dataset).filter(Dataset.id == dataset_data['id']).first()
+    target_id = dataset_data.get('dataset_id') or dataset_data['id']
+    ds_db = db_session.query(Dataset).filter(Dataset.id == target_id).first()
     assert ds_db is not None
     assert ds_db.schema_info is not None
     assert "total_marketing_spend" in ds_db.schema_info.kpis_extracted
+

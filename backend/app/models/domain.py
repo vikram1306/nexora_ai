@@ -15,6 +15,7 @@ class Tenant(Base):
     users = relationship("User", back_populates="tenant", cascade="all, delete-orphan")
     datasets = relationship("Dataset", back_populates="tenant", cascade="all, delete-orphan")
     alerts = relationship("SentinelAlert", back_populates="tenant", cascade="all, delete-orphan")
+    jobs = relationship("IngestionJob", back_populates="tenant", cascade="all, delete-orphan")
 
 
 class User(Base):
@@ -81,3 +82,24 @@ class SentinelAlert(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     tenant = relationship("Tenant", back_populates="alerts")
+
+
+class IngestionJob(Base):
+    __tablename__ = "ingestion_jobs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id = Column(String(36), ForeignKey("tenants.id"), nullable=False, index=True)
+    dataset_id = Column(String(36), ForeignKey("datasets.id", ondelete="SET NULL"), nullable=True, index=True)
+    filename = Column(String(255), nullable=False)
+    department = Column(String(50), nullable=False, index=True)
+    status = Column(String(50), nullable=False, default="PENDING")  # PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED
+    progress = Column(Integer, nullable=False, default=0)  # 0 to 100
+    stage = Column(String(100), nullable=False, default="Queued")
+    row_count = Column(Integer, nullable=False, default=0)
+    error_message = Column(Text, nullable=True)
+    job_metadata = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    tenant = relationship("Tenant", back_populates="jobs")
+

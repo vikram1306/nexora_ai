@@ -45,6 +45,12 @@ class EnterpriseMemoryManager:
         )
 
     def get_tenant_kpi_summary(self) -> Dict[str, Any]:
+        # 1. Check Redis KPI Cache
+        cached = cache_manager.get_kpi_summary(self.tenant_id)
+        if cached:
+            return cached
+
+        # 2. Database query fallback
         datasets = self.db.query(Dataset).filter(
             Dataset.tenant_id == self.tenant_id,
             Dataset.department.isnot(None)
@@ -57,4 +63,9 @@ class EnterpriseMemoryManager:
                     "row_count": ds.row_count,
                     "kpis": ds.schema_info.kpis_extracted
                 }
+
+        if summary:
+            cache_manager.set_kpi_summary(self.tenant_id, summary, ttl=3600)
+
         return summary
+
