@@ -1,10 +1,13 @@
-import pandas as pd
-import numpy as np
 from typing import List
+
+import numpy as np
+import pandas as pd
+
+from app.agents.base import BaseDepartmentAgent
 from app.memory.enterprise_memory import EnterpriseMemoryManager
 from app.schemas.agents import DepartmentAgentOutput, MetricDetail
-from app.agents.base import BaseDepartmentAgent
 from app.utils.date_filters import apply_natural_language_date_filter
+
 
 class FinanceAgent(BaseDepartmentAgent):
     def __init__(self, memory: EnterpriseMemoryManager):
@@ -29,7 +32,7 @@ class FinanceAgent(BaseDepartmentAgent):
             avg_exp = float(df_filtered[exp_col].mean())
             metrics.append(MetricDetail(name="Total Expenses", value=round(total_exp, 2), unit="$"))
             metrics.append(MetricDetail(name="Average Operating Cost", value=round(avg_exp, 2), unit="$"))
-            
+
             # ONLY append EBITDA line if prompt explicitly asks for profit/margin/ebitda
             if any(k in prompt_lower for k in ["ebitda", "profit", "margin", "net income"]):
                 sales_df = self.memory.query_department_dataframe("sales")
@@ -40,7 +43,7 @@ class FinanceAgent(BaseDepartmentAgent):
                     ebitda_margin = (net_ebitda / total_rev) * 100
                     metrics.append(MetricDetail(name="Net EBITDA", value=round(net_ebitda, 2), unit="$"))
                     insights.append(f"**Cross-Departmental Net EBITDA Analysis**: Comparing Total Sales Revenue (${total_rev:,.2f}) against Operating Expenditure (${total_exp:,.2f}) yields **${net_ebitda:,.2f} Net EBITDA** (Net EBITDA Margin: **{ebitda_margin:.2f}%**).")
-            
+
             period_label = f" for requested period ({', '.join(target_periods)})" if target_periods else ""
             insights.append(f"Financial operating expenditure stands at ${total_exp:,.2f}{period_label}.")
             evidence.append(f"Finance dataset reflects ${total_exp:,.2f} cost on column '{exp_col}'.")

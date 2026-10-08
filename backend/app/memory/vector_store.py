@@ -1,5 +1,5 @@
 import os
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 try:
     import chromadb
@@ -9,6 +9,7 @@ except ImportError:
     HAS_VECTOR_DB = False
 
 from app.core.config import settings
+
 
 class VectorMemoryStore:
     """Enterprise Vector Database Manager using ChromaDB & SentenceTransformers with lazy model loading."""

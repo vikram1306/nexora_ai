@@ -1,22 +1,16 @@
 import os
 import sys
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import pytest
 import pandas as pd
-import numpy as np
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-from app.main import app
-from app.core.database import Base, get_db
 from app.core.security import create_access_token, hash_password
-from app.models.domain import User, Tenant, Dataset, SentinelAlert
-from app.memory.enterprise_memory import EnterpriseMemoryManager
-from app.sentinel.sentinel_service import SentinelAIService
+from app.main import app
+from app.models.domain import Dataset, SentinelAlert, Tenant, User
 from app.planner.planner import PlannerAgent
-
+from app.sentinel.sentinel_service import SentinelAIService
 from tests.conftest import TestingSessionLocal
 
 client = TestClient(app)
@@ -27,7 +21,7 @@ def create_test_user_and_token(db, email, role, tenant_id):
         tenant = Tenant(id=tenant_id, name=f"Company {tenant_id}", slug=f"company-{tenant_id}")
         db.add(tenant)
         db.commit()
-    
+
     user = User(
         email=email,
         hashed_password=hash_password("Password123!"),

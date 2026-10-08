@@ -1,9 +1,12 @@
-import pandas as pd
+from typing import List
+
 import numpy as np
-from typing import List, Dict, Any
+import pandas as pd
 from sqlalchemy.orm import Session
-from app.models.domain import Dataset, SentinelAlert
+
 from app.memory.enterprise_memory import EnterpriseMemoryManager
+from app.models.domain import Dataset, SentinelAlert
+
 
 class SentinelAIService:
     """Continuous background anomaly detection daemon and root cause analysis engine."""
@@ -100,7 +103,7 @@ class SentinelAIService:
                         f"outside the 98.8% confidence interval [{lower_bound:,.2f}, {upper_bound:,.2f}] "
                         f"(baseline: {baseline_val:,.2f}, robust Z-Score: {z_val:.2f})."
                     )
-                    
+
                     breach_detail = (
                         f"exceeded upper confidence bound of {upper_bound:,.2f} by +{abs(anomaly_val - upper_bound):,.2f}"
                         if is_spike else

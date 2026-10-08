@@ -1,5 +1,6 @@
 import os
 import sys
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import pytest
@@ -7,8 +8,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 import app.core.database as db_mod
-from app.main import app
 from app.core.database import Base, get_db
+from app.main import app
 
 TEST_DB_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "test_runner.db"))
 SQLALCHEMY_DATABASE_URL = f"sqlite:///{TEST_DB_FILE}"

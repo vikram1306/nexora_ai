@@ -1,10 +1,12 @@
-import json
 import hashlib
+import json
 import time
-import os
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
+
 import redis
+
 from app.core.config import settings
+
 
 class EnterpriseCacheManager:
     """Enterprise Redis Caching Layer with TTL management, cache invalidation, and zero-downtime in-memory fallback."""

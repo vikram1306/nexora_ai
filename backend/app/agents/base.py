@@ -1,7 +1,10 @@
-import pandas as pd
 from typing import List
+
+import pandas as pd
+
 from app.memory.enterprise_memory import EnterpriseMemoryManager
 from app.schemas.agents import DepartmentAgentOutput
+
 
 class BaseDepartmentAgent:
     def __init__(self, memory: EnterpriseMemoryManager, department_name: str):
@@ -11,9 +14,9 @@ class BaseDepartmentAgent:
     def execute(self, prompt: str) -> DepartmentAgentOutput:
         df = self.memory.query_department_dataframe(self.department_name)
         vector_hits = self.memory.search_semantic_memory(prompt, department=self.department_name)
-        
+
         evidence = [hit["content"] for hit in vector_hits]
-        
+
         if df is None or df.empty:
             return DepartmentAgentOutput(
                 department=self.department_name,

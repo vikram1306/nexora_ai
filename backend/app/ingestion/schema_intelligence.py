@@ -1,7 +1,7 @@
 import re
+from typing import Any, Dict
+
 import pandas as pd
-import numpy as np
-from typing import Dict, Any, List
 
 DEPARTMENT_CANONICAL_SCHEMAS = {
     "sales": {
@@ -51,7 +51,7 @@ class SchemaIntelligenceEngine:
             clean_col = str(orig_col).strip().lower().replace(" ", "_")
             col_tokens = set(re.split(r'[^a-z0-9]+', clean_col))
             sample_vals = df[orig_col].dropna().head(3).tolist()
-            
+
             best_canonical = "ignore"
             best_confidence = 0.50
 

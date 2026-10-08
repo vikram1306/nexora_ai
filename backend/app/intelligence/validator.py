@@ -1,5 +1,7 @@
 from typing import List, Tuple
+
 from app.schemas.agents import DepartmentAgentOutput
+
 
 class ResponseValidator:
     """Zero-hallucination verification engine. Cross-checks numerical claims & evidence."""
@@ -19,7 +21,7 @@ class ResponseValidator:
                 validation_notes.append(f"{out.department.capitalize()}: Limited dataset records available.")
             else:
                 validation_notes.append(f"{out.department.capitalize()}: Verified {len(out.metrics)} numerical metrics against underlying SQL/data logs.")
-            
+
             total_confidence += dept_score
 
         overall_score = round(total_confidence / len(department_outputs), 2)

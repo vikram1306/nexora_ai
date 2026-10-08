@@ -1,22 +1,25 @@
 import os
-import uuid
 import shutil
-import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, Query, status
-from fastapi.responses import JSONResponse
+import uuid
+from typing import List
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy.orm import Session
-from typing import List, Optional
+
+from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.limiter import limiter
 from app.core.job_queue import job_manager
-from app.memory.redis_cache import cache_manager
-from app.models.domain import User, Dataset, IngestionJob
-from app.schemas.ingestion import (
-    DatasetResponse, SchemaAnalysisResponse, SchemaConfirmationRequest, IngestionJobResponse
-)
-from app.api.deps import get_current_user
+from app.core.limiter import limiter
 from app.ingestion.schema_intelligence import SchemaIntelligenceEngine
+from app.memory.redis_cache import cache_manager
+from app.models.domain import Dataset, User
+from app.schemas.ingestion import (
+    DatasetResponse,
+    IngestionJobResponse,
+    SchemaAnalysisResponse,
+    SchemaConfirmationRequest,
+)
 
 router = APIRouter(prefix="/ingest", tags=["Data Ingestion & Memory"])
 

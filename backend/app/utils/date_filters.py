@@ -1,6 +1,7 @@
 import re
+from typing import List, Tuple
+
 import pandas as pd
-from typing import Tuple, List
 
 MONTH_MAP = {
     "january": "01", "jan": "01",

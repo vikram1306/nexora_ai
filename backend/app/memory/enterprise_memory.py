@@ -1,8 +1,12 @@
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
-from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
-from app.models.domain import Dataset, DatasetSchema
+
+from app.memory.redis_cache import cache_manager
 from app.memory.vector_store import vector_memory_store
+from app.models.domain import Dataset
+
 
 class EnterpriseMemoryManager:
     """Enterprise Memory Layer coordinating SQL querying, pandas analytics, and ChromaDB vector search."""

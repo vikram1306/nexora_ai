@@ -1,12 +1,14 @@
-from datetime import datetime, timedelta
-from typing import Any, Union, Optional
 import hashlib
 import hmac
+from datetime import datetime, timedelta
+from typing import Any, Optional, Union
+
 try:
     from jose import jwt
 except ImportError:
     import jwt
 from app.core.config import settings
+
 
 def hash_password(password: str) -> str:
     """Hash password using SHA-256 with secret key salt for zero-dependency reliability."""
@@ -21,7 +23,7 @@ def create_access_token(subject: Union[str, Any], tenant_id: str, role: str, exp
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+
     to_encode = {
         "exp": expire,
         "sub": str(subject),

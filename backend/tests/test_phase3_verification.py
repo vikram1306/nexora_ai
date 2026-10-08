@@ -1,11 +1,12 @@
 import time
-import pytest
+
 import pandas as pd
-from app.planner.planner import PlannerAgent
-from app.memory.enterprise_memory import EnterpriseMemoryManager
+
 from app.intelligence import ResponseValidator
-from app.schemas.agents import DepartmentAgentOutput, MetricDetail
 from app.models.domain import Dataset
+from app.planner.planner import PlannerAgent
+from app.schemas.agents import DepartmentAgentOutput, MetricDetail
+
 
 def save_test_dataset(db, tmp_path, tenant_id, department, df, name="data.csv"):
     csv_path = tmp_path / f"{tenant_id}_{department}_{name}"
@@ -79,7 +80,7 @@ def test_task12_response_validator_confidence_scores(db_session, tmp_path):
     res_p = planner_p.execute_query("Give me full company overall analysis across sales, finance, hr, marketing, operations")
     # Response validator penalizes empty/missing department outputs
     assert res_p.confidence_score < 0.90
-    
+
     # 4. Out of domain precision confidence
     res_ood = planner.execute_query("How do I write a React component for dating advice?")
     assert res_ood.is_out_of_domain

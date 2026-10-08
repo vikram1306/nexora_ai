@@ -1,6 +1,7 @@
 import re
-import pandas as pd
 from typing import Union
+
+import pandas as pd
 
 # Known LLM system/role delimiters and prompt injection attack tokens
 PROMPT_INJECTION_PATTERNS = [
@@ -25,13 +26,13 @@ def sanitize_text_for_prompt(text: Union[str, None]) -> str:
     """Sanitizes untrusted text strings to prevent indirect prompt injection when fed into LLMs."""
     if not text or not isinstance(text, str):
         return ""
-    
+
     # 1. Remove dangerous LLM prompt delimiters and injection trigger phrases
     cleaned = COMPILED_INJECTION_REGEX.sub("", text)
-    
+
     # 2. Strip control characters (ASCII 0-31 except tab \t and newline \n)
     cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", cleaned)
-    
+
     return cleaned.strip()
 
 def sanitize_dataframe_cell_values(df: pd.DataFrame) -> pd.DataFrame:

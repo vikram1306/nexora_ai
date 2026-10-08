@@ -1,23 +1,23 @@
 import os
 import sys
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import pytest
 import pandas as pd
-import numpy as np
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.core.database import Base
-from app.memory.enterprise_memory import EnterpriseMemoryManager
 from app.agents.finance import FinanceAgent
 from app.agents.marketing import MarketingAgent
-from app.utils.date_filters import apply_natural_language_date_filter
+from app.core.database import Base
+from app.memory.enterprise_memory import EnterpriseMemoryManager
+from app.models.domain import Dataset, SentinelAlert
 from app.planner.planner import PlannerAgent
 from app.sentinel.sentinel_service import SentinelAIService
-from app.models.domain import Dataset, SentinelAlert
-
+from app.utils.date_filters import apply_natural_language_date_filter
 from tests.conftest import TestingSessionLocal
+
 
 @pytest.fixture
 def db_session():
@@ -186,9 +186,8 @@ def test_regression_ebitda_output_changes_with_input_data(db_session, tmp_path):
 
 def test_regression_strategic_recommendation_data_derived(db_session, tmp_path):
     """Regression Test 2: Assert Strategic Recommendations use real data baselines instead of hardcoded numbers."""
-    from app.intelligence import StrategicIntelligenceAgent
     from app.agents.marketing import MarketingAgent
-    from app.agents.hr import HRAgent
+    from app.intelligence import StrategicIntelligenceAgent
 
     tenant_id = "test_strategic_data_tenant"
 

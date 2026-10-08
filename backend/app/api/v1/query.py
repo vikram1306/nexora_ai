@@ -1,13 +1,14 @@
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+
+from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.limiter import limiter
 from app.models.domain import User
-from app.schemas.agents import ExecutiveQueryRequest, ExecutiveQueryResponse
-from app.api.deps import get_current_user
 from app.planner.planner import PlannerAgent
+from app.schemas.agents import ExecutiveQueryRequest, ExecutiveQueryResponse
 
 router = APIRouter(prefix="/query", tags=["Multi-Agent Intelligence Query"])
 
@@ -34,6 +35,7 @@ def export_executive_pdf(
 ):
     """Executes query and streams back a formatted PDF executive intelligence report."""
     from fastapi.responses import Response
+
     from app.reporting.pdf_exporter import generate_executive_pdf_bytes
 
     if not request.prompt.strip():
@@ -46,7 +48,7 @@ def export_executive_pdf(
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=Nexora_Executive_Report.pdf"}
+        headers={"Content-Disposition": "attachment; filename=Nexora_Executive_Report.pdf"}
     )
 
 @router.get("/ollama-status")

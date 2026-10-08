@@ -1,9 +1,10 @@
-import re
 import os
-import tempfile
-import pandas as pd
+import re
+from typing import Any, Callable, Dict, List, Optional
+
 import numpy as np
-from typing import Dict, Any, List, Optional, Callable
+import pandas as pd
+
 
 class DataProfiler:
     """Enterprise-grade CSV profiler with chunked streaming ingestion, bounded O(1) memory footprint, and online KPI statistics."""
@@ -23,13 +24,13 @@ class DataProfiler:
 
         # 1. Preview initial rows to deduce schema and columns
         preview_df = pd.read_csv(file_path, nrows=100)
-        
+
         # Determine column renames if confirmed_mapping supplied
         rename_map = {}
         if confirmed_mapping:
             rename_map = {
-                orig: target 
-                for orig, target in confirmed_mapping.items() 
+                orig: target
+                for orig, target in confirmed_mapping.items()
                 if target and target != "ignore" and orig in preview_df.columns
             }
 
@@ -73,7 +74,7 @@ class DataProfiler:
         # 3. Streaming Accumulators
         total_rows = 0
         null_counts = {col: 0 for col in cleaned_columns}
-        
+
         # Numeric statistics accumulators
         num_stats = {
             col: {
@@ -286,8 +287,8 @@ class DataProfiler:
 
     @staticmethod
     def _build_streaming_trends(
-        period_sums: Dict[str, Dict[str, float]], 
-        num_stats: Dict[str, Dict[str, Any]], 
+        period_sums: Dict[str, Dict[str, float]],
+        num_stats: Dict[str, Dict[str, Any]],
         total_rows: int
     ) -> List[Dict[str, Any]]:
         trends = []

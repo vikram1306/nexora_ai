@@ -1,5 +1,7 @@
 from typing import List
+
 from app.schemas.agents import DepartmentAgentOutput, StrategicRecommendation
+
 
 class StrategicIntelligenceAgent:
     """Dynamic executive recommendation engine producing prompt-tailored, data-backed action items for ANY business query."""

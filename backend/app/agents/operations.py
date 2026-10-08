@@ -1,9 +1,12 @@
-import pandas as pd
-import numpy as np
 from typing import List
+
+import numpy as np
+import pandas as pd
+
+from app.agents.base import BaseDepartmentAgent
 from app.memory.enterprise_memory import EnterpriseMemoryManager
 from app.schemas.agents import DepartmentAgentOutput, MetricDetail
-from app.agents.base import BaseDepartmentAgent
+
 
 class OperationsAgent(BaseDepartmentAgent):
     def __init__(self, memory: EnterpriseMemoryManager):
@@ -12,7 +15,7 @@ class OperationsAgent(BaseDepartmentAgent):
     def _analyze_data(self, df: pd.DataFrame, prompt: str, evidence: List[str]) -> DepartmentAgentOutput:
         num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
         delay_col = next((c for c in num_cols if "delay" in c or "lead" in c or "time" in c), num_cols[0] if num_cols else None)
-        
+
         metrics = []
         insights = []
         sql_executed = "SELECT AVG(fulfillment_delay_days) FROM operations_dataset"

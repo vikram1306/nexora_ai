@@ -1,17 +1,18 @@
-import io
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
+
 from app.schemas.agents import ExecutiveQueryResponse
+
 
 class ExecutiveReportPDF(FPDF):
     def header(self):
         self.set_fill_color(15, 23, 42) # Obsidian Dark Banner
         self.rect(0, 0, 210, 32, "F")
-        
+
         self.set_font("Helvetica", "B", 16)
         self.set_text_color(255, 255, 255)
         self.cell(0, 10, "NEXORA AI - EXECUTIVE INTELLIGENCE REPORT", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="L")
-        
+
         self.set_font("Helvetica", "", 9)
         self.set_text_color(148, 163, 184)
         self.cell(0, 6, "Zero-Hallucination Verified | Autonomous Enterprise OS", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="L")

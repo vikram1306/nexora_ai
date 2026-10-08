@@ -1,10 +1,13 @@
-import pandas as pd
-import numpy as np
 from typing import List
+
+import numpy as np
+import pandas as pd
+
+from app.agents.base import BaseDepartmentAgent
 from app.memory.enterprise_memory import EnterpriseMemoryManager
 from app.schemas.agents import DepartmentAgentOutput, MetricDetail
-from app.agents.base import BaseDepartmentAgent
 from app.utils.date_filters import apply_natural_language_date_filter
+
 
 class SalesAgent(BaseDepartmentAgent):
     def __init__(self, memory: EnterpriseMemoryManager):
@@ -32,7 +35,7 @@ class SalesAgent(BaseDepartmentAgent):
             avg_deal = float(df_filtered[rev_col].mean())
             metrics.append(MetricDetail(name="Total Revenue", value=round(total_rev, 2), unit="$"))
             metrics.append(MetricDetail(name="Average Deal Size", value=round(avg_deal, 2), unit="$"))
-            
+
             period_label = f" for requested period ({', '.join(target_periods)})" if target_periods else ""
             insights.append(f"Total sales revenue recorded at ${total_rev:,.2f}{period_label} across {len(df_filtered)} transactions.")
             evidence.append(f"Sales dataset contains {len(df_filtered)} filtered records with aggregate sum of ${total_rev:,.2f} on column '{rev_col}'.")

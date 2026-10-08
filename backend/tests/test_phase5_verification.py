@@ -1,8 +1,9 @@
-import pytest
 import pandas as pd
+
 from app.ingestion.schema_intelligence import SchemaIntelligenceEngine
-from app.models.domain import Dataset, DatasetSchema
-from tests.test_phase2_verification import create_test_user_and_token, client
+from app.models.domain import Dataset
+from tests.test_phase2_verification import client, create_test_user_and_token
+
 
 def test_task16_schema_analysis_proposal(tmp_path):
     # Test file with non-standard column headers
@@ -18,9 +19,9 @@ def test_task16_schema_analysis_proposal(tmp_path):
 
     assert proposal['department'] == 'sales'
     assert proposal['total_columns'] == 3
-    
+
     mappings = {m['user_column']: m for m in proposal['proposed_mappings']}
-    
+
     assert mappings['client_monthly_revenue']['proposed_canonical'] == 'revenue'
     assert mappings['client_monthly_revenue']['confidence'] >= 0.75
 

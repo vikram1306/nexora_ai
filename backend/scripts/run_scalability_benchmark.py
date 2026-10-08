@@ -1,20 +1,19 @@
 import os
 import sys
-import time
-import psutil
 import tempfile
-import pandas as pd
-import numpy as np
+import time
 from datetime import datetime
+
+import numpy as np
+import pandas as pd
+import psutil
 
 # Set backend path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.ingestion.profiler import DataProfiler
 from app.memory.redis_cache import cache_manager
-from app.core.database import SessionLocal
-from app.planner.planner import PlannerAgent
-from app.models.domain import Tenant, User, Dataset
+
 
 def get_current_process_memory_mb() -> float:
     """Returns the current process RSS memory in Megabytes."""
@@ -98,7 +97,7 @@ def run_benchmark():
             # 3. Redis Cache Benchmark (Cold vs Warm Execution)
             tenant_id = f"bench-tenant-{size}"
             prompt = "Analyze sales revenue performance and regional deal growth"
-            
+
             # Cold query test
             t0_cold = time.time()
             cache_manager.invalidate_tenant_cache(tenant_id)

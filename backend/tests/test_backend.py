@@ -1,14 +1,14 @@
 import os
 import sys
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import pytest
 import pandas as pd
 from fastapi.testclient import TestClient
 
-from app.main import app
 from app.core.security import hash_password, verify_password
 from app.ingestion.profiler import DataProfiler
+from app.main import app
 
 client = TestClient(app)
 

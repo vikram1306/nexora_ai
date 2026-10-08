@@ -1,9 +1,12 @@
-import pandas as pd
-import numpy as np
 from typing import List
+
+import numpy as np
+import pandas as pd
+
+from app.agents.base import BaseDepartmentAgent
 from app.memory.enterprise_memory import EnterpriseMemoryManager
 from app.schemas.agents import DepartmentAgentOutput, MetricDetail
-from app.agents.base import BaseDepartmentAgent
+
 
 class HRAgent(BaseDepartmentAgent):
     def __init__(self, memory: EnterpriseMemoryManager):
@@ -13,11 +16,11 @@ class HRAgent(BaseDepartmentAgent):
         headcount = len(df)
         num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
         sal_col = next((c for c in num_cols if "salar" in c or "pay" in c or "comp" in c), num_cols[0] if num_cols else None)
-        
+
         metrics = [MetricDetail(name="Total Headcount", value=float(headcount), unit="employees")]
         sql_executed = "SELECT COUNT(*), AVG(annual_salary) FROM hr_dataset"
         insights = [f"HR workforce records total {headcount} active employees."]
-        
+
         if sal_col:
             avg_sal = float(df[sal_col].mean())
             metrics.append(MetricDetail(name="Average Compensation", value=round(avg_sal, 2), unit="$"))

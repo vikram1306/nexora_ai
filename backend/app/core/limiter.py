@@ -1,7 +1,9 @@
 import redis
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+
 from app.core.config import settings
+
 
 def _get_storage_uri() -> str:
     # Use Redis if URL is configured and Redis server is actively responding; fallback to in-memory storage

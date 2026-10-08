@@ -1,23 +1,19 @@
 import concurrent.futures
+from typing import Any, Dict, List, Optional
+
 import httpx
-import pandas as pd
 import numpy as np
-from typing import List, Dict, Any, Optional
+import pandas as pd
 from sqlalchemy.orm import Session
+
+from app.agents import FinanceAgent, HRAgent, MarketingAgent, OperationsAgent, SalesAgent
 from app.core.config import settings
 from app.core.database import SessionLocal
+from app.intelligence import ResponseValidator, StrategicIntelligenceAgent
 from app.memory.enterprise_memory import EnterpriseMemoryManager
 from app.memory.redis_cache import cache_manager
-from app.schemas.agents import (
-    PlannerTaskPlan, DepartmentAgentOutput, ExecutiveQueryResponse
-)
-
-from app.agents import (
-    SalesAgent, FinanceAgent, HRAgent, MarketingAgent, OperationsAgent
-)
-from app.intelligence import ResponseValidator, StrategicIntelligenceAgent
+from app.schemas.agents import DepartmentAgentOutput, ExecutiveQueryResponse, PlannerTaskPlan
 from app.utils.sanitizer import sanitize_text_for_prompt
-
 
 OOD_KEYWORDS = [
     "politics", "election", "president", "vote", "medical", "doctor", "symptom",
@@ -229,7 +225,7 @@ class PlannerAgent:
     def _calculate_cross_departmental_ebitda(self, prompt: str, department_outputs: List[DepartmentAgentOutput]) -> Optional[str]:
         prompt_lower = prompt.lower()
         has_ebitda_keywords = any(k in prompt_lower for k in ["ebitda", "net margin", "net profit", "revenue vs expense", "revenue vs cost"])
-        
+
         sales_out = next((d for d in department_outputs if d.department == "sales"), None)
         finance_out = next((d for d in department_outputs if d.department == "finance"), None)
 

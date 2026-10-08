@@ -1,10 +1,13 @@
 import re
-import pandas as pd
-import numpy as np
 from typing import List
+
+import numpy as np
+import pandas as pd
+
+from app.agents.base import BaseDepartmentAgent
 from app.memory.enterprise_memory import EnterpriseMemoryManager
 from app.schemas.agents import DepartmentAgentOutput, MetricDetail
-from app.agents.base import BaseDepartmentAgent
+
 
 class MarketingAgent(BaseDepartmentAgent):
     def __init__(self, memory: EnterpriseMemoryManager):

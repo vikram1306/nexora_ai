@@ -1,19 +1,17 @@
 import os
 import sys
 import time
-import pytest
-import pandas as pd
+
 import numpy as np
+import pandas as pd
+import pytest
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app.main import app
-from app.core.database import SessionLocal
-from app.memory.redis_cache import cache_manager, EnterpriseCacheManager
 from app.ingestion.profiler import DataProfiler
-from app.core.job_queue import job_manager
-from app.models.domain import IngestionJob, Dataset
+from app.main import app
+from app.memory.redis_cache import EnterpriseCacheManager
 
 client = TestClient(app)
 
@@ -52,7 +50,7 @@ def test_redis_cache_manager_operations():
 def test_chunked_streaming_profiler(tmp_path):
     """Verify that chunked streaming profiler handles multi-chunk files with exact online statistics."""
     csv_file = tmp_path / "large_stream_test.csv"
-    
+
     # Generate 15,000 synthetic rows
     n_rows = 15000
     dates = pd.date_range(start="2026-01-01", periods=150, freq="D")

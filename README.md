@@ -21,8 +21,10 @@ Nexora AI is a production-grade SaaS AI Operating System built for modern enterp
   - **Marketing**: Customer Acquisition Cost (CAC), ROAS, channel conversion rates.
   - **Operations**: Fulfillment delays, inventory turnover, operational efficiency.
 - 🛡️ **Response Validator & Confidence Scoring**: Ensures zero hallucinations by cross-checking all numerical assertions against database metrics and generating confidence scores.
-- 🚀 **Strategic Intelligence Engine**: Cross-departmental recommendation generator yielding data-backed actionable executive insights.
-- 🚨 **Sentinel AI (Continuous Anomaly Monitoring)**: Background service detecting spikes, drops, threshold violations, and executing automated root-cause analysis with multi-tier alerts (`Employee` $\rightarrow$ `CEO`).
+- 🛡️ **Observability & Error Tracking**: Structured JSON logging with request correlation IDs (`X-Request-ID`), access latency tracking, and plug-and-play Sentry APM integration.
+- 🩺 **Comprehensive Service Health Checks**: Live telemetry probes (`/health`, `/health/liveness`, `/health/readiness`) verifying DB latency, Redis cluster state, vector collections, and OS resource metrics.
+- 🔁 **Continuous Integration CI/CD Pipeline**: Automated GitHub Actions testing matrix (Python 3.11/3.12, Ruff linting, Pytest, Next.js build validation).
+- 💾 **PostgreSQL Backup & Disaster Recovery**: Turnkey backup & restore scripts with automated 14-day retention and runbook documentation ([DATABASE_BACKUP_RESTORE.md](./docs/DATABASE_BACKUP_RESTORE.md)).
 - 💎 **Luxury Executive UI**: Minimal obsidian dark mode theme (`#08080A`), glassmorphism, Framer Motion dynamic animations, keyboard command palette (`Ctrl+K`), and interactive Recharts visuals.
 
 ---

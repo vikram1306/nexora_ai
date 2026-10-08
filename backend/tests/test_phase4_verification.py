@@ -1,10 +1,9 @@
-import pytest
 import pandas as pd
-import numpy as np
+
 from app.ingestion.profiler import DataProfiler
 from app.sentinel.sentinel_service import SentinelAIService
-from app.models.domain import Dataset, SentinelAlert
 from tests.test_phase2_verification import save_dataset
+
 
 def test_task14_period_over_period_trend_detection(tmp_path):
     # Create an unsorted multi-row dataset per month where naive first-vs-last fails
@@ -37,7 +36,7 @@ def test_task14_period_over_period_trend_detection(tmp_path):
 
 def test_task15_sentinel_confidence_bounds(db_session, tmp_path):
     tenant_id = "test_phase4_sentinel_tenant"
-    
+
     # 12 records: 11 normal around 100, 1 spike outlier at 500
     normal_vals = [100.0, 102.0, 98.0, 101.0, 99.0, 100.0, 103.0, 97.0, 100.0, 101.0, 99.0]
     all_vals = normal_vals + [500.0]
