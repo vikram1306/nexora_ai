@@ -117,7 +117,7 @@ app.include_router(sentinel.router, prefix=settings.API_V1_STR)
 def root_check():
     return {
         "platform": settings.PROJECT_NAME,
-        "tagline": "Enterprise Intelligence. Autonomous Decisions.",
+        "tagline": "Enterprise Intelligence. AI-assisted decisions.",
         "status": "online",
         "version": settings.VERSION
     }

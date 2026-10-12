@@ -1,3 +1,5 @@
+from typing import Dict, List, Optional
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -8,7 +10,13 @@ from app.core.database import get_db
 from app.core.limiter import limiter
 from app.models.domain import User
 from app.planner.planner import PlannerAgent
-from app.schemas.agents import ExecutiveQueryRequest, ExecutiveQueryResponse
+from app.schemas.agents import (
+    ExecutiveQueryRequest,
+    ExecutiveQueryResponse,
+    RecommendationDecisionCreate,
+    RecommendationDecisionResponse,
+    RecommendationGovernanceStats,
+)
 
 router = APIRouter(prefix="/query", tags=["Multi-Agent Intelligence Query"])
 
@@ -91,4 +99,91 @@ def clear_redis_cache(
         "tenant_id": current_user.tenant_id,
         "message": "Tenant cache invalidated successfully"
     }
+
+
+# --- Responsible AI: Human-in-the-Loop Decision Logging Endpoints ---
+
+@router.post("/recommendations/decisions", response_model=RecommendationDecisionResponse, status_code=201)
+def log_recommendation_decision(
+    decision_in: RecommendationDecisionCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Logs human executive accept/reject decisions on AI strategic recommendations for auditability and feedback loops."""
+    from app.models.domain import RecommendationDecision
+
+    decision = RecommendationDecision(
+        tenant_id=current_user.tenant_id,
+        user_id=current_user.id,
+        recommendation_id=decision_in.recommendation_id,
+        recommendation_title=decision_in.recommendation_title,
+        department=decision_in.department.lower().strip(),
+        action_type=decision_in.action_type.upper().strip(),
+        action_plan=decision_in.action_plan,
+        feedback_notes=decision_in.feedback_notes,
+        confidence_score=decision_in.confidence_score,
+        impact_urgency=decision_in.impact_urgency
+    )
+    db.add(decision)
+    db.commit()
+    db.refresh(decision)
+    return decision
+
+
+@router.get("/recommendations/decisions", response_model=List[RecommendationDecisionResponse])
+def list_recommendation_decisions(
+    limit: int = 50,
+    department: Optional[str] = None,
+    action_type: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Lists logged human accept/reject decisions for the current tenant."""
+    from app.models.domain import RecommendationDecision
+
+    q = db.query(RecommendationDecision).filter(RecommendationDecision.tenant_id == current_user.tenant_id)
+    if department:
+        q = q.filter(RecommendationDecision.department == department.lower().strip())
+    if action_type:
+        q = q.filter(RecommendationDecision.action_type == action_type.upper().strip())
+
+    return q.order_by(RecommendationDecision.created_at.desc()).limit(limit).all()
+
+
+@router.get("/recommendations/stats", response_model=RecommendationGovernanceStats)
+def get_recommendation_governance_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Returns acceptance rate and governance telemetry for AI-assisted executive recommendations."""
+    from app.models.domain import RecommendationDecision
+
+    decisions = db.query(RecommendationDecision).filter(
+        RecommendationDecision.tenant_id == current_user.tenant_id
+    ).order_by(RecommendationDecision.created_at.desc()).all()
+
+    total = len(decisions)
+    accepted = sum(1 for d in decisions if d.action_type == "ACCEPTED")
+    rejected = sum(1 for d in decisions if d.action_type == "REJECTED")
+    modified = sum(1 for d in decisions if d.action_type == "MODIFIED")
+    acceptance_rate = round((accepted / total * 100), 1) if total > 0 else 0.0
+
+    dept_breakdown: Dict[str, Dict[str, int]] = {}
+    for d in decisions:
+        dept = d.department
+        if dept not in dept_breakdown:
+            dept_breakdown[dept] = {"ACCEPTED": 0, "REJECTED": 0, "MODIFIED": 0}
+        if d.action_type in dept_breakdown[dept]:
+            dept_breakdown[dept][d.action_type] += 1
+
+    return RecommendationGovernanceStats(
+        total_decisions=total,
+        accepted_count=accepted,
+        rejected_count=rejected,
+        modified_count=modified,
+        acceptance_rate_pct=acceptance_rate,
+        department_breakdown=dept_breakdown,
+        recent_decisions=decisions[:10]
+    )
+
 

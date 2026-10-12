@@ -76,7 +76,7 @@ export default function LandingPage() {
         >
           Enterprise Intelligence. <br />
           <span className="italic bg-gradient-to-r from-white via-neutral-200 to-accent-cyan bg-clip-text text-transparent">
-            Autonomous Decisions.
+            AI-Assisted Decisions.
           </span>
         </motion.h1>
 
@@ -86,8 +86,8 @@ export default function LandingPage() {
           transition={{ duration: 0.8, delay: 0.2 }}
           className="text-lg md:text-xl text-neutral-400 max-w-3xl mx-auto font-light leading-relaxed mb-12"
         >
-          Nexora AI continuously ingests departmental data, learns your business deeply, coordinates 
-          five specialized AI department agents, and proactively flags anomalies through Sentinel AI.
+          Nexora AI synthesizes cross-departmental intelligence, coordinates 5 specialized AI department agents, 
+          evaluates confidence guardrails, and provides human-governed decision acceptance workflows.
         </motion.p>
 
         <motion.div 

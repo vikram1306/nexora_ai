@@ -19,6 +19,7 @@ class Tenant(Base):
     datasets = relationship("Dataset", back_populates="tenant", cascade="all, delete-orphan")
     alerts = relationship("SentinelAlert", back_populates="tenant", cascade="all, delete-orphan")
     jobs = relationship("IngestionJob", back_populates="tenant", cascade="all, delete-orphan")
+    decisions = relationship("RecommendationDecision", back_populates="tenant", cascade="all, delete-orphan")
 
 
 class User(Base):
@@ -33,6 +34,7 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     tenant = relationship("Tenant", back_populates="users")
+    decisions = relationship("RecommendationDecision", back_populates="user")
 
 
 class Dataset(Base):
@@ -105,4 +107,25 @@ class IngestionJob(Base):
     completed_at = Column(DateTime, nullable=True)
 
     tenant = relationship("Tenant", back_populates="jobs")
+
+
+class RecommendationDecision(Base):
+    """Logs human executive accept/reject decisions on AI strategic recommendations for Responsible AI governance."""
+    __tablename__ = "recommendation_decisions"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id = Column(String(36), ForeignKey("tenants.id"), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    recommendation_id = Column(String(100), nullable=False, index=True)
+    recommendation_title = Column(String(255), nullable=False)
+    department = Column(String(50), nullable=False, index=True)
+    action_type = Column(String(50), nullable=False)  # ACCEPTED, REJECTED, MODIFIED
+    action_plan = Column(Text, nullable=True)
+    feedback_notes = Column(Text, nullable=True)
+    confidence_score = Column(Float, nullable=False, default=0.95)
+    impact_urgency = Column(String(50), nullable=True)  # Low, Medium, High, Critical
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    tenant = relationship("Tenant", back_populates="decisions")
+    user = relationship("User", back_populates="decisions")
 

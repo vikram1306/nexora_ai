@@ -21,6 +21,7 @@ frontend/build/
 # Testing & Cache
 .pytest_cache/
 .coverage
+*.tsbuildinfo
 
 # Configuration & Secrets
 .env

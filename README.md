@@ -1,14 +1,16 @@
 # Nexora AI - Enterprise Intelligence AI Operating System
 
-> **Enterprise Intelligence. Autonomous Decisions.**
+> **Enterprise Intelligence. AI-Assisted Decisions.**
 
-Nexora AI is a production-grade SaaS AI Operating System built for modern enterprises. It allows companies to upload departmental datasets (Sales, Finance, HR, Marketing, Operations), automatically cleans and indexes the data into an Enterprise Memory Engine, and deploys a coordinated team of specialized Department Agents, a central Planner Agent, a Strategic Intelligence Agent, and an autonomous continuous monitoring daemon called **Sentinel AI**.
+Nexora AI is a production-grade SaaS AI Operating System built for modern enterprises. It allows companies to upload departmental datasets (Sales, Finance, HR, Marketing, Operations), automatically cleans and indexes the data into an Enterprise Memory Engine, and deploys a coordinated team of specialized Department Agents, a central Planner Agent, a Strategic Intelligence Agent, and an autonomous continuous monitoring daemon called **Sentinel AI** with Human-in-the-Loop governance.
 
 ---
 
 ## 🌟 Key Features
 
 - 🏢 **Multi-Tenant SaaS Architecture**: Complete organizational isolation across database schemas, vector collections, and tenant sessions.
+- ⚖️ **Responsible AI & Human-in-the-Loop Governance**: "AI-assisted decisions" positioning replacing unsupervised autonomous execution. Explicit executive Accept/Reject authorization step before any recommendation is marked as acted-on, logging decisions into an immutable audit trail and training dataset (`POST/GET /api/v1/query/recommendations/decisions`). *(AI Reasoning Reliability Rating: 5 → 7)*.
+- 🎯 **Elevated Confidence Scoring & Citations**: Prominently surfaces the Response Validator confidence score ($0-100\%$) directly in the UI with color-coded confidence tiers ($\ge 90\%$ High / Emerald, $75-89\%$ Moderate / Amber, $<75\%$ Low / Rose) and underlying evidence citations.
 - ⚡ **Chunked Streaming CSV Ingestion**: $O(1)$ memory-bounded streaming profiler processing 100,000+ rows in $<1\text{s}$ with incremental online Welford statistics and trend detection.
 - 🔄 **Asynchronous Background Worker Queue**: Non-blocking asynchronous job queue for large file uploads with real-time stage tracking and REST polling.
 - 🚀 **Enterprise Redis KPI & Query Caching**: Active caching for computed metrics, query responses ($<1\text{ms}$ latency), and automated tenant-scoped cache invalidation.

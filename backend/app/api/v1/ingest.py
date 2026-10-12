@@ -105,7 +105,8 @@ def confirm_and_ingest_dataset(
         source_file_path=staged_path,
         target_file_path=final_file_path,
         confirmed_mapping=req.confirmed_mapping,
-        db=db
+        db=db,
+        enqueue=not sync
     )
 
     if sync:
@@ -168,7 +169,8 @@ async def upload_csv_dataset(
         source_file_path=staged_path,
         target_file_path=final_file_path,
         confirmed_mapping=confirmed_map,
-        db=db
+        db=db,
+        enqueue=not sync
     )
 
     if sync:

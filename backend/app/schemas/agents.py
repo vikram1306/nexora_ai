@@ -1,6 +1,8 @@
+import uuid
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MetricDetail(BaseModel):
@@ -8,6 +10,7 @@ class MetricDetail(BaseModel):
     value: float
     unit: str = ""
     change_pct: Optional[float] = None
+
 
 class DepartmentAgentOutput(BaseModel):
     department: str  # sales, finance, hr, marketing, operations
@@ -18,12 +21,18 @@ class DepartmentAgentOutput(BaseModel):
     insights: List[str]
     confidence_score: float
 
+
 class StrategicRecommendation(BaseModel):
+    id: str = Field(default_factory=lambda: f"rec_{uuid.uuid4().hex[:10]}")
     title: str
     action_item: str
     target_department: str
     expected_impact: str
     supporting_evidence: List[str]
+    confidence_score: float = 0.95
+    impact_urgency: str = "High"  # Low, Medium, High, Critical
+    status: str = "PROPOSED"  # PROPOSED, ACCEPTED, REJECTED, MODIFIED
+
 
 class PlannerTaskPlan(BaseModel):
     intent: str
@@ -33,8 +42,10 @@ class PlannerTaskPlan(BaseModel):
     timeframe: Optional[str] = None
     key_metrics_requested: List[str] = []
 
+
 class ExecutiveQueryRequest(BaseModel):
     prompt: str
+
 
 class ExecutiveQueryResponse(BaseModel):
     prompt: str
@@ -46,3 +57,43 @@ class ExecutiveQueryResponse(BaseModel):
     strategic_recommendations: List[StrategicRecommendation]
     evidence_citations: List[str]
     chart_config: Optional[Dict[str, Any]] = None
+
+
+# --- Human-in-the-Loop Governance & Recommendation Decision Schemas ---
+
+class RecommendationDecisionCreate(BaseModel):
+    recommendation_id: str
+    recommendation_title: str
+    department: str
+    action_type: str = "ACCEPTED"  # ACCEPTED, REJECTED, MODIFIED
+    action_plan: Optional[str] = None
+    feedback_notes: Optional[str] = None
+    confidence_score: float = 0.95
+    impact_urgency: Optional[str] = "High"
+
+
+class RecommendationDecisionResponse(BaseModel):
+    id: str
+    tenant_id: str
+    user_id: str
+    recommendation_id: str
+    recommendation_title: str
+    department: str
+    action_type: str
+    action_plan: Optional[str] = None
+    feedback_notes: Optional[str] = None
+    confidence_score: float
+    impact_urgency: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RecommendationGovernanceStats(BaseModel):
+    total_decisions: int
+    accepted_count: int
+    rejected_count: int
+    modified_count: int
+    acceptance_rate_pct: float
+    department_breakdown: Dict[str, Dict[str, int]]
+    recent_decisions: List[RecommendationDecisionResponse]

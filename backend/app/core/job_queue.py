@@ -35,9 +35,10 @@ class IngestionJobManager:
         source_file_path: str,
         target_file_path: str,
         confirmed_mapping: Optional[Dict[str, str]] = None,
-        db: Optional[Session] = None
+        db: Optional[Session] = None,
+        enqueue: bool = True
     ) -> IngestionJob:
-        """Creates an IngestionJob record and dispatches background processing worker."""
+        """Creates an IngestionJob record and optionally dispatches background processing worker."""
         job_id = str(uuid.uuid4())
         should_close_db = False
         if db is None:
@@ -52,7 +53,7 @@ class IngestionJobManager:
                 filename=filename,
                 status="PENDING",
                 progress=0,
-                stage="Queued in background worker pool",
+                stage="Queued in background worker pool" if enqueue else "Starting synchronous execution",
                 row_count=0,
                 job_metadata={"confirmed_mapping": confirmed_mapping or {}},
                 created_at=datetime.utcnow()
@@ -69,24 +70,25 @@ class IngestionJobManager:
                 "department": department,
                 "status": "PENDING",
                 "progress": 0,
-                "stage": "Queued in background worker pool",
+                "stage": "Queued in background worker pool" if enqueue else "Starting synchronous execution",
                 "row_count": 0,
                 "dataset_id": None,
                 "error_message": None,
                 "created_at": str(job.created_at)
             })
 
-            # Submit to background executor
-            self._executor.submit(
-                self._run_ingestion_worker,
-                job_id=job_id,
-                tenant_id=tenant_id,
-                department=department,
-                filename=filename,
-                source_file_path=source_file_path,
-                target_file_path=target_file_path,
-                confirmed_mapping=confirmed_mapping
-            )
+            # Submit to background executor if enqueue is True
+            if enqueue:
+                self._executor.submit(
+                    self._run_ingestion_worker,
+                    job_id=job_id,
+                    tenant_id=tenant_id,
+                    department=department,
+                    filename=filename,
+                    source_file_path=source_file_path,
+                    target_file_path=target_file_path,
+                    confirmed_mapping=confirmed_mapping
+                )
 
             return job
         finally:
