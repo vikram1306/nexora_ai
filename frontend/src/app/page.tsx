@@ -23,7 +23,7 @@ import {
 
 export default function LandingPage() {
   return (
-    <div className="relative min-h-screen bg-obsidian-900 text-white overflow-hidden scroll-smooth">
+    <div className="relative min-h-screen bg-obsidian-900 text-white overflow-hidden scroll-smooth font-sans selection:bg-accent-cyan/30 selection:text-accent-cyan">
       {/* Dynamic Background Glow */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[500px] bg-glow-radial pointer-events-none opacity-80 blur-3xl" />
       <div className="absolute top-1/3 right-0 w-[400px] h-[400px] bg-accent-violet/10 rounded-full blur-3xl pointer-events-none" />
@@ -46,13 +46,25 @@ export default function LandingPage() {
           <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
         </nav>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <Link 
+            href="/login" 
+            className="px-3.5 py-2 rounded-lg font-medium text-xs text-neutral-300 hover:text-white transition-colors"
+          >
+            Sign In
+          </Link>
+          <Link 
+            href="/register" 
+            className="hidden sm:inline-flex px-3.5 py-2 rounded-lg font-medium text-xs text-neutral-300 hover:text-white border border-white/10 hover:border-white/20 transition-all"
+          >
+            Register
+          </Link>
           <Link 
             href="/dashboard" 
-            className="px-5 py-2.5 rounded-lg font-medium text-sm bg-white text-obsidian-950 hover:bg-neutral-200 transition-all shadow-lg hover:shadow-white/20 flex items-center gap-2 group"
+            className="px-4 py-2 rounded-lg font-semibold text-xs bg-white text-obsidian-950 hover:bg-neutral-200 transition-all shadow-lg hover:shadow-white/20 flex items-center gap-1.5 group"
           >
             Launch Platform
-            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
           </Link>
         </div>
       </header>
@@ -103,12 +115,12 @@ export default function LandingPage() {
             Enter Executive Dashboard
             <ArrowRight className="w-5 h-5" />
           </Link>
-          <a 
-            href="#architecture"
+          <Link 
+            href="/register"
             className="w-full sm:w-auto px-8 py-4 rounded-xl glass-panel border border-white/15 text-white font-medium text-base hover:bg-white/5 transition-all flex items-center justify-center gap-3"
           >
-            Explore Architecture
-          </a>
+            Provision Workspace
+          </Link>
         </motion.div>
       </section>
 
@@ -300,7 +312,7 @@ export default function LandingPage() {
               <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-accent-emerald" /> Enterprise Memory (PostgreSQL + ChromaDB)</li>
               <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-accent-emerald" /> Response Validator Confidence Scoring</li>
             </ul>
-            <Link href="/dashboard" className="block text-center w-full py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition-all">
+            <Link href="/register" className="block text-center w-full py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition-all">
               Start Free Trial
             </Link>
           </div>
@@ -321,7 +333,7 @@ export default function LandingPage() {
               <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-accent-cyan" /> Multi-Tier Alerts (Employee to CEO)</li>
               <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-accent-cyan" /> Strategic Intelligence Recommendation Engine</li>
             </ul>
-            <Link href="/dashboard" className="block text-center w-full py-3 rounded-xl bg-accent-cyan text-obsidian-950 font-semibold text-xs transition-all hover:brightness-110 shadow-lg shadow-accent-cyan/20">
+            <Link href="/register" className="block text-center w-full py-3 rounded-xl bg-accent-cyan text-obsidian-950 font-semibold text-xs transition-all hover:brightness-110 shadow-lg shadow-accent-cyan/20">
               Launch Enterprise OS
             </Link>
           </div>
@@ -338,8 +350,8 @@ export default function LandingPage() {
               <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-accent-emerald" /> Custom Open-Source LLM Fine-Tuning</li>
               <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-accent-emerald" /> 24/7 Dedicated Solutions Architect</li>
             </ul>
-            <Link href="/dashboard" className="block text-center w-full py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition-all">
-              Contact Architecture Team
+            <Link href="/login" className="block text-center w-full py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition-all">
+              Sign In to Private Portal
             </Link>
           </div>
         </div>

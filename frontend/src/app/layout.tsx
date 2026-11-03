@@ -1,21 +1,22 @@
-import './globals.css'
-import type { Metadata } from 'next'
+import './globals.css';
+import type { Metadata } from 'next';
+import { AuthProvider } from '@/context/AuthContext';
 
 export const metadata: Metadata = {
   title: 'Nexora AI | Enterprise Intelligence AI Operating System',
-  description: 'Enterprise Intelligence. Autonomous Decisions. Nexora AI is an AI Operating System that turns company datasets into continuous executive intelligence.',
-}
+  description: 'Enterprise Intelligence. AI-assisted decisions. Nexora AI is an AI Operating System that turns company datasets into continuous executive intelligence.',
+};
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <html lang="en" className="dark">
       <body className="bg-obsidian-900 text-white min-h-screen selection:bg-accent-cyan/30 selection:text-accent-cyan">
-        {children}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
-  )
+  );
 }

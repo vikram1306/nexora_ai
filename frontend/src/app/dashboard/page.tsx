@@ -1,1427 +1,223 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { jsPDF } from 'jspdf';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { Header } from '@/components/layout/Header';
+import { Sidebar } from '@/components/layout/Sidebar';
+import { CommandPalette } from '@/components/layout/CommandPalette';
+import { OverviewTab } from '@/components/dashboard/OverviewTab';
+import { QueryTab } from '@/components/dashboard/QueryTab';
+import { IngestTab } from '@/components/dashboard/IngestTab';
+import { SentinelTab } from '@/components/dashboard/SentinelTab';
+import { GovernanceTab } from '@/components/dashboard/GovernanceTab';
 import {
-  BrainCircuit,
-  Activity,
-  Database,
-  UploadCloud,
-  TrendingUp,
-  CheckCircle2,
-  BarChart3,
-  Sparkles,
-  ArrowRight,
-  RefreshCw,
-  Building,
-  AlertCircle,
-  FileSpreadsheet,
-  Layers,
-  Users,
-  Code,
-  Download,
-  Terminal,
-  Cpu,
-  ChevronRight,
-  ShieldCheck,
-  ThumbsUp,
-  ThumbsDown,
-  Check,
-  X,
-  ShieldAlert,
-  Award
-} from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+  ingestApi,
+  sentinelApi,
+  queryApi,
+  DatasetItem,
+  SentinelAlertItem,
+  GovernanceStats
+} from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
 
-export default function ExecutiveDashboard() {
+export default function DashboardPage() {
+  const router = useRouter();
+  const { token, isAuthenticated, isLoading: authLoading } = useAuth();
+
   const [activeTab, setActiveTab] = useState<'overview' | 'query' | 'ingest' | 'sentinel' | 'governance'>('overview');
-  const [queryInput, setQueryInput] = useState('');
-  const [isExecuting, setIsExecuting] = useState(false);
-  const [queryResult, setQueryResult] = useState<any>(null);
-  const [apiError, setApiError] = useState('');
-  const [activeSqlModal, setActiveSqlModal] = useState<string | null>(null);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [presetQuery, setPresetQuery] = useState('');
 
-  // Authentication State
-  const [token, setToken] = useState<string | null>(null);
-
-  // Ollama Status State
+  // Core Data State
+  const [datasets, setDatasets] = useState<DatasetItem[]>([]);
+  const [alerts, setAlerts] = useState<SentinelAlertItem[]>([]);
+  const [governanceStats, setGovernanceStats] = useState<GovernanceStats | null>(null);
+  const [decisionsHistory, setDecisionsHistory] = useState<any[]>([]);
   const [ollamaStatus, setOllamaStatus] = useState<{ status: string; active_llm: string }>({
     status: 'checking',
-    active_llm: 'Checking Local Ollama...'
+    active_llm: 'Verifying Ollama...',
   });
 
-  // Human-in-the-Loop Governance & Decisions State
-  const [recommendationDecisions, setRecommendationDecisions] = useState<Record<string, 'ACCEPTED' | 'REJECTED'>>({});
-  const [isLoggingDecision, setIsLoggingDecision] = useState<string | null>(null);
-  const [governanceStats, setGovernanceStats] = useState<any | null>(null);
-  const [decisionsHistory, setDecisionsHistory] = useState<any[]>([]);
-
-  // File Upload & Datasets List State
-  const [selectedDept, setSelectedDept] = useState('sales');
-  const [fileToUpload, setFileToUpload] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadSuccess, setUploadSuccess] = useState('');
-  const [uploadedDatasets, setUploadedDatasets] = useState<any[]>([]);
-  const [jobProgress, setJobProgress] = useState<{
-    jobId: string;
-    progress: number;
-    stage: string;
-    status: string;
-  } | null>(null);
-
-  // Schema Intelligence Modal State
-  const [schemaProposal, setSchemaProposal] = useState<any | null>(null);
-  const [userMapping, setUserMapping] = useState<Record<string, string>>({});
-  const [isConfirmingSchema, setIsConfirmingSchema] = useState(false);
-
-  // Sentinel Alerts State
-  const [alerts, setAlerts] = useState<any[]>([]);
-
-  // Get API Base URL
-  const getApiUrl = () => {
-    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-  };
-
-  // Auto-Authenticate Demo CEO Token & Check Ollama Status on mount
+  // If not authenticated, redirect to /login so the user can sign in or register explicitly
   useEffect(() => {
-    async function ensureAuth() {
-      const apiUrl = getApiUrl();
+    if (!authLoading && !isAuthenticated) {
+      router.push('/login');
+    }
+  }, [authLoading, isAuthenticated, router]);
+
+  // Ollama status check
+  useEffect(() => {
+    async function checkOllama() {
       try {
-        const res = await fetch(`${apiUrl}/api/v1/auth/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            company_name: "Acme Global Enterprise",
-            email: "ceo@acme.com",
-            password: "Password123!",
-            full_name: "Jane Doe",
-            role: "CEO"
-          })
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          setToken(data.access_token);
-        } else {
-          const loginRes = await fetch(`${apiUrl}/api/v1/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: "ceo@acme.com",
-              password: "Password123!"
-            })
-          });
-          if (loginRes.ok) {
-            const loginData = await loginRes.json();
-            setToken(loginData.access_token);
-          }
-        }
-
-        // Check Ollama status
-        const oRes = await fetch(`${apiUrl}/api/v1/query/ollama-status`);
-        if (oRes.ok) {
-          const oData = await oRes.json();
-          setOllamaStatus(oData);
-        }
+        const data = await queryApi.checkOllamaStatus();
+        setOllamaStatus(data);
       } catch (err) {
-        console.warn("Backend API not reachable at", apiUrl);
+        setOllamaStatus({
+          status: 'offline',
+          active_llm: 'Deterministic Multi-Agent Engine',
+        });
       }
     }
-    ensureAuth();
+    checkOllama();
   }, []);
 
-  // Fetch Datasets List
-  const fetchDatasets = async () => {
+  // Fetch Datasets
+  const fetchDatasets = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await fetch(`${getApiUrl()}/api/v1/ingest/datasets`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setUploadedDatasets(data);
-      }
-    } catch (e) {
-      console.warn("Could not fetch datasets list");
+      const data = await ingestApi.getDatasets();
+      setDatasets(data);
+    } catch (err) {
+      console.warn('Could not fetch datasets list');
     }
-  };
+  }, [token]);
 
-  // Fetch Responsible AI Governance Decisions & Stats
-  const fetchGovernanceStats = async () => {
+  // Fetch Sentinel Alerts
+  const fetchAlerts = useCallback(async () => {
     if (!token) return;
     try {
-      const [statsRes, listRes] = await Promise.all([
-        fetch(`${getApiUrl()}/api/v1/query/recommendations/stats`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${getApiUrl()}/api/v1/query/recommendations/decisions?limit=25`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
+      const data = await sentinelApi.getAlerts();
+      setAlerts(data);
+    } catch (err) {
+      console.warn('Could not fetch sentinel alerts');
+    }
+  }, [token]);
+
+  // Fetch Governance Stats & Decisions
+  const fetchGovernance = useCallback(async () => {
+    if (!token) return;
+    try {
+      const [stats, history] = await Promise.all([
+        queryApi.getGovernanceStats().catch(() => null),
+        queryApi.listDecisions(50).catch(() => []),
       ]);
-      if (statsRes.ok) {
-        const statsData = await statsRes.json();
-        setGovernanceStats(statsData);
-      }
-      if (listRes.ok) {
-        const listData = await listRes.json();
-        setDecisionsHistory(listData);
-        // Sync local decision state
-        const stateMap: Record<string, 'ACCEPTED' | 'REJECTED'> = {};
-        listData.forEach((d: any) => {
-          if (d.action_type === 'ACCEPTED' || d.action_type === 'REJECTED') {
-            stateMap[d.recommendation_id] = d.action_type;
-          }
-        });
-        setRecommendationDecisions(prev => ({ ...prev, ...stateMap }));
-      }
-    } catch (e) {
-      console.warn("Could not fetch governance stats");
-    }
-  };
-
-  // Handle Human-in-the-Loop Recommendation Decision (Accept / Reject)
-  const handleRecommendationDecision = async (rec: any, actionType: 'ACCEPTED' | 'REJECTED') => {
-    if (!token) return;
-    const recId = rec.id || `rec_${Date.now()}`;
-    setIsLoggingDecision(recId);
-    try {
-      const res = await fetch(`${getApiUrl()}/api/v1/query/recommendations/decisions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          recommendation_id: recId,
-          recommendation_title: rec.title,
-          department: rec.target_department || 'Executive',
-          action_type: actionType,
-          action_plan: rec.action_item,
-          confidence_score: rec.confidence_score || 0.95,
-          impact_urgency: rec.impact_urgency || 'High',
-          feedback_notes: actionType === 'ACCEPTED' ? 'Approved by CEO for department execution' : 'Rejected by executive review'
-        })
-      });
-      if (res.ok) {
-        setRecommendationDecisions(prev => ({ ...prev, [recId]: actionType }));
-        await fetchGovernanceStats();
-      }
+      if (stats) setGovernanceStats(stats);
+      if (history) setDecisionsHistory(history);
     } catch (err) {
-      console.error("Failed to log recommendation decision:", err);
-    } finally {
-      setIsLoggingDecision(null);
+      console.warn('Could not fetch governance stats');
     }
-  };
+  }, [token]);
 
+  // Refresh data on token change or tab navigation
   useEffect(() => {
-    fetchDatasets();
-    fetchGovernanceStats();
-  }, [token, activeTab]);
+    if (token) {
+      fetchDatasets();
+      fetchAlerts();
+      fetchGovernance();
+    }
+  }, [token, activeTab, fetchDatasets, fetchAlerts, fetchGovernance]);
 
-  // Background Ingestion Job Polling Hook
-  const pollJobProgress = (jobId: string, authToken: string, dept: string) => {
-    const apiUrl = getApiUrl();
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`${apiUrl}/api/v1/ingest/jobs/${jobId}`, {
-          headers: { 'Authorization': `Bearer ${authToken}` }
-        });
-        if (res.ok) {
-          const job = await res.json();
-          setJobProgress({
-            jobId: job.id,
-            progress: job.progress || 0,
-            stage: job.stage || 'Processing...',
-            status: job.status
-          });
+  // Handle Ctrl+K custom event trigger
+  useEffect(() => {
+    const handleOpen = () => setIsCommandPaletteOpen(true);
+    window.addEventListener('open-command-palette', handleOpen);
+    return () => window.removeEventListener('open-command-palette', handleOpen);
+  }, []);
 
-          if (job.status === 'COMPLETED') {
-            clearInterval(interval);
-            setIsUploading(false);
-            setIsConfirmingSchema(false);
-            setUploadSuccess(`Successfully ingested '${job.filename}' (${job.row_count?.toLocaleString() || 0} rows) into ${dept.toUpperCase()} Enterprise Memory!`);
-            setFileToUpload(null);
-            setSchemaProposal(null);
-            fetchDatasets();
-            setTimeout(() => setJobProgress(null), 4000);
-          } else if (job.status === 'FAILED') {
-            clearInterval(interval);
-            setIsUploading(false);
-            setIsConfirmingSchema(false);
-            setApiError(job.error_message || 'Ingestion job failed in background queue.');
-            setTimeout(() => setJobProgress(null), 4000);
-          }
-        }
-      } catch (err) {
-        // Retry polling on temporary network hiccup
-      }
-    }, 450);
+  const handleExecutePresetQuery = (prompt: string) => {
+    setPresetQuery(prompt);
+    setActiveTab('query');
   };
 
-  // Real CSV Upload Handler via Background Worker Queue
-  const handleFileUpload = async () => {
-    if (!fileToUpload) {
-      setApiError('Please select a CSV file first.');
-      return;
-    }
-    if (!token) {
-      setApiError('Authenticating with backend server... Please try again in a second.');
-      return;
-    }
-
-    setIsUploading(true);
-    setUploadSuccess('');
-    setApiError('');
-
-    const formData = new FormData();
-    formData.append('department', selectedDept);
-    formData.append('file', fileToUpload);
-
+  const handleTriggerSentinelScan = async () => {
+    setActiveTab('sentinel');
     try {
-      const res = await fetch(`${getApiUrl()}/api/v1/ingest/upload`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
-      });
-
-      if (res.status === 202 || res.ok) {
-        const jobData = await res.json();
-        setJobProgress({
-          jobId: jobData.id,
-          progress: jobData.progress || 10,
-          stage: jobData.stage || 'Queued in background worker pool',
-          status: jobData.status
-        });
-        pollJobProgress(jobData.id, token, selectedDept);
-      } else {
-        const errData = await res.json();
-        setApiError(errData.detail || 'Failed to upload CSV file.');
-        setIsUploading(false);
-      }
-    } catch (err: any) {
-      setApiError(`Could not connect to backend server at ${getApiUrl()}. Make sure your backend server is running on port 8000.`);
-      setIsUploading(false);
-    }
-  };
-
-  // Analyze CSV Schema to Propose Canonical Mapping
-  const handleAnalyzeSchema = async () => {
-    if (!fileToUpload) {
-      setApiError('Please select a CSV file first.');
-      return;
-    }
-    if (!token) {
-      setApiError('Authenticating with backend server... Please try again in a second.');
-      return;
-    }
-
-    setIsUploading(true);
-    setUploadSuccess('');
-    setApiError('');
-
-    const formData = new FormData();
-    formData.append('department', selectedDept);
-    formData.append('file', fileToUpload);
-
-    try {
-      const res = await fetch(`${getApiUrl()}/api/v1/ingest/analyze-schema`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
-      });
-
-      if (res.ok) {
-        const proposalData = await res.json();
-        setSchemaProposal(proposalData);
-        
-        const initialMap: Record<string, string> = {};
-        proposalData.proposed_mappings.forEach((item: any) => {
-          initialMap[item.user_column] = item.proposed_canonical;
-        });
-        setUserMapping(initialMap);
-      } else {
-        const errData = await res.json();
-        setApiError(errData.detail || 'Failed to analyze CSV schema.');
-      }
-    } catch (err: any) {
-      setApiError(`Could not connect to backend server at ${getApiUrl()}. Make sure backend is running on port 8000.`);
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  // Confirm Schema Mapping & Ingest Dataset via Background Queue
-  const handleConfirmAndIngest = async () => {
-    if (!schemaProposal || !token) return;
-    setIsConfirmingSchema(true);
-    setApiError('');
-
-    try {
-      const res = await fetch(`${getApiUrl()}/api/v1/ingest/confirm-and-ingest`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          temp_file_id: schemaProposal.temp_file_id,
-          department: schemaProposal.department,
-          confirmed_mapping: userMapping
-        })
-      });
-
-      if (res.status === 202 || res.ok) {
-        const jobData = await res.json();
-        setJobProgress({
-          jobId: jobData.id,
-          progress: jobData.progress || 10,
-          stage: jobData.stage || 'Queued in background worker pool',
-          status: jobData.status
-        });
-        setSchemaProposal(null);
-        pollJobProgress(jobData.id, token, selectedDept);
-      } else {
-        const errData = await res.json();
-        setApiError(errData.detail || 'Failed to confirm schema mapping.');
-        setIsConfirmingSchema(false);
-      }
-    } catch (err: any) {
-      setApiError('Error confirming schema mapping.');
-      setIsConfirmingSchema(false);
-    }
-  };
-
-
-  // Real AI Query Handler
-  const handleExecuteQuery = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!queryInput.trim()) return;
-
-    setIsExecuting(true);
-    setQueryResult(null);
-    setApiError('');
-
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const res = await fetch(`${getApiUrl()}/api/v1/query/execute`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ prompt: queryInput })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setQueryResult(data);
-      } else {
-        const errData = await res.json();
-        setApiError(errData.detail || 'Query execution failed');
-      }
-    } catch (err: any) {
-      setApiError(`Could not reach backend API at ${getApiUrl()}. Please check if your backend server is running.`);
-    } finally {
-      setIsExecuting(false);
-    }
-  };
-
-  // Export Executive Intelligence Report as PDF File
-  const handleExportReport = () => {
-    if (!queryResult) return;
-    try {
-      const doc = new jsPDF();
-      
-      // Title Banner
-      doc.setFillColor(15, 23, 42); // Obsidian Slate
-      doc.rect(0, 0, 210, 35, 'F');
-      
-      doc.setTextColor(255, 255, 255);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(18);
-      doc.text("NEXORA AI - EXECUTIVE INTELLIGENCE REPORT", 14, 18);
-      
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(148, 163, 184);
-      doc.text(`Generated: ${new Date().toLocaleString()} | System Status: Verified`, 14, 26);
-
-      let yPos = 45;
-      doc.setTextColor(15, 23, 42);
-
-      // Metadata Block
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.text(`Query Prompt:`, 14, yPos);
-      doc.setFont("helvetica", "normal");
-      doc.text(`${queryResult.prompt}`, 45, yPos);
-      yPos += 7;
-
-      doc.setFont("helvetica", "bold");
-      doc.text(`Intent:`, 14, yPos);
-      doc.setFont("helvetica", "normal");
-      doc.text(`${queryResult.intent}`, 45, yPos);
-      yPos += 7;
-
-      doc.setFont("helvetica", "bold");
-      doc.text(`Verification Score:`, 14, yPos);
-      doc.setFont("helvetica", "normal");
-      doc.text(`${Math.round(queryResult.confidence_score * 100)}% Zero-Hallucination Confidence`, 45, yPos);
-      yPos += 12;
-
-      // Executive Summary
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.setTextColor(30, 41, 59);
-      doc.text("EXECUTIVE SUMMARY", 14, yPos);
-      yPos += 6;
-
-      doc.setLineWidth(0.5);
-      doc.setDrawColor(226, 232, 240);
-      doc.line(14, yPos, 196, yPos);
-      yPos += 6;
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      const cleanSummary = (queryResult.executive_summary || '').replace(/###\s?/g, '').replace(/\*\*/g, '');
-      const summaryLines = doc.splitTextToSize(cleanSummary, 180);
-      doc.text(summaryLines, 14, yPos);
-      yPos += (summaryLines.length * 4.5) + 10;
-
-      // Strategic Recommendations
-      if (yPos > 240) { doc.addPage(); yPos = 20; }
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.text("STRATEGIC RECOMMENDATIONS", 14, yPos);
-      yPos += 6;
-      doc.line(14, yPos, 196, yPos);
-      yPos += 6;
-
-      if (queryResult.strategic_recommendations) {
-        queryResult.strategic_recommendations.forEach((r: any, i: number) => {
-          if (yPos > 250) { doc.addPage(); yPos = 20; }
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(9.5);
-          doc.setTextColor(15, 23, 42);
-          doc.text(`${i + 1}. [${r.target_department}] ${r.title}`, 14, yPos);
-          yPos += 5;
-
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(8.5);
-          doc.setTextColor(51, 65, 85);
-          const actionLines = doc.splitTextToSize(`Action: ${r.action_item}`, 175);
-          doc.text(actionLines, 18, yPos);
-          yPos += (actionLines.length * 4) + 2;
-
-          doc.setFont("helvetica", "bold");
-          doc.setTextColor(16, 185, 129); // Emerald impact
-          doc.text(`Expected Impact: ${r.expected_impact}`, 18, yPos);
-          yPos += 7;
-        });
-      }
-
-      doc.save(`Nexora_Executive_Report_${Date.now()}.pdf`);
+      await sentinelApi.triggerScan();
+      fetchAlerts();
     } catch (err) {
-      console.error("PDF generation failed, falling back to text file", err);
-      const textContent = `NEXORA AI - EXECUTIVE INTELLIGENCE REPORT\nQuery: ${queryResult.prompt}\nSummary:\n${queryResult.executive_summary}`;
-      const element = document.createElement("a");
-      const file = new Blob([textContent], { type: 'text/plain' });
-      element.href = URL.createObjectURL(file);
-      element.download = `Nexora_Executive_Report_${Date.now()}.txt`;
-      document.body.appendChild(element);
-      element.click();
-      document.body.removeChild(element);
+      console.warn('Trigger scan error', err);
     }
   };
 
-  // Render Formatted Executive Summary Section Cards
-  const renderFormattedSummary = (summaryText: string) => {
-    if (!summaryText) return null;
-    const sections = summaryText.split('### ').filter(Boolean);
+  const unackAlertsCount = alerts.filter((a) => !a.acknowledged).length;
 
-    if (sections.length <= 1 && !summaryText.includes('###')) {
-      return (
-        <div className="p-5 rounded-xl bg-obsidian-850 border border-white/10 text-neutral-300 text-sm leading-relaxed whitespace-pre-line">
-          {summaryText}
-        </div>
-      );
-    }
-
+  if (authLoading) {
     return (
-      <div className="space-y-4">
-        {sections.map((sec, idx) => {
-          const lines = sec.split('\n');
-          const title = lines[0].trim();
-          const contentLines = lines.slice(1).filter(l => l.trim().length > 0);
-
-          const isEbitda = title.includes('EBITDA') || title.includes('FINANCIAL');
-          const isLlama = title.includes('LLAMA');
-
-          return (
-            <div
-              key={idx}
-              className={`p-5 rounded-xl border transition-all ${
-                isEbitda
-                  ? 'bg-accent-cyan/10 border-accent-cyan/40 shadow-lg shadow-accent-cyan/5'
-                  : isLlama
-                  ? 'bg-accent-emerald/10 border-accent-emerald/30'
-                  : 'bg-obsidian-850 border-white/10'
-              }`}
-            >
-              <h4 className={`text-sm font-mono font-bold uppercase tracking-wider mb-3 flex items-center gap-2 ${
-                isEbitda ? 'text-accent-cyan' : isLlama ? 'text-accent-emerald' : 'text-white'
-              }`}>
-                <ChevronRight className="w-4 h-4" /> {title}
-              </h4>
-
-              <div className="space-y-2">
-                {contentLines.map((line, lIdx) => {
-                  const cleaned = line.replace(/^•\s*/, '').trim();
-                  if (!cleaned) return null;
-
-                  return (
-                    <div key={lIdx} className="flex items-start gap-2 text-xs text-neutral-200 leading-relaxed">
-                      <span className="text-accent-cyan font-bold">•</span>
-                      <span dangerouslySetInnerHTML={{
-                        __html: cleaned.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
-                      }} />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
+      <div className="min-h-screen bg-obsidian-950 text-white flex flex-col items-center justify-center font-sans">
+        <div className="w-8 h-8 border-2 border-accent-cyan border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-xs font-mono text-neutral-400">Loading Executive Session...</p>
       </div>
     );
-  };
+  }
+
+  if (!isAuthenticated) {
+    return null; // Will redirect in useEffect
+  }
 
   return (
-    <div className="min-h-screen bg-obsidian-950 text-white flex flex-col font-sans">
-      {/* Top Header */}
-      <header className="glass-panel border-b border-white/10 px-8 py-4 flex items-center justify-between sticky top-0 z-40">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-accent-cyan to-accent-emerald flex items-center justify-center font-bold text-obsidian-950">
-              N
-            </div>
-            <span className="font-bold text-lg">NEXORA AI</span>
-          </Link>
-          <span className="text-white/20">|</span>
-          <div className="flex items-center gap-2 text-xs font-mono text-neutral-400 bg-obsidian-850 px-3 py-1.5 rounded-lg border border-white/5">
-            <Building className="w-3.5 h-3.5 text-accent-cyan" />
-            Acme Global Enterprise (CEO Portal)
-          </div>
-          {/* Ollama LLM Connection Badge */}
-          <div className={`hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-mono ${
-            ollamaStatus.status === 'online' ? 'bg-accent-emerald/10 text-accent-emerald border-accent-emerald/30' : 'bg-obsidian-850 text-neutral-400 border-white/10'
-          }`}>
-            <Cpu className="w-3 h-3 text-accent-cyan" />
-            <span>{ollamaStatus.active_llm}</span>
-          </div>
-        </div>
+    <div className="min-h-screen bg-obsidian-950 text-white flex flex-col font-sans selection:bg-accent-cyan/30 selection:text-accent-cyan">
+      {/* Executive Top Header */}
+      <Header
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        ollamaStatus={ollamaStatus}
+        unacknowledgedAlertsCount={unackAlertsCount}
+        decisionsCount={governanceStats?.total_decisions || 0}
+      />
 
-        {/* Tab Navigation */}
-        <div className="flex items-center gap-1 bg-obsidian-850 p-1 rounded-xl border border-white/10 text-xs font-medium">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${activeTab === 'overview' ? 'bg-white text-obsidian-950 font-semibold shadow' : 'text-neutral-400 hover:text-white'}`}
-          >
-            <BarChart3 className="w-3.5 h-3.5" /> Overview
-          </button>
-          <button
-            onClick={() => setActiveTab('query')}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${activeTab === 'query' ? 'bg-white text-obsidian-950 font-semibold shadow' : 'text-neutral-400 hover:text-white'}`}
-          >
-            <BrainCircuit className="w-3.5 h-3.5" /> AI Command Center
-          </button>
-          <button
-            onClick={() => setActiveTab('ingest')}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${activeTab === 'ingest' ? 'bg-white text-obsidian-950 font-semibold shadow' : 'text-neutral-400 hover:text-white'}`}
-          >
-            <UploadCloud className="w-3.5 h-3.5" /> Memory Ingestion
-          </button>
-          <button
-            onClick={() => setActiveTab('sentinel')}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 relative ${activeTab === 'sentinel' ? 'bg-white text-obsidian-950 font-semibold shadow' : 'text-neutral-400 hover:text-white'}`}
-          >
-            <Activity className="w-3.5 h-3.5 text-accent-rose" /> Sentinel AI
-            {alerts.filter(a => !a.acknowledged).length > 0 && (
-              <span className="w-2 h-2 rounded-full bg-accent-rose animate-ping absolute top-1 right-1" />
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('governance')}
-            className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${activeTab === 'governance' ? 'bg-white text-obsidian-950 font-semibold shadow' : 'text-neutral-400 hover:text-white'}`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5 text-accent-cyan" /> Governance Audit
-            {governanceStats && governanceStats.total_decisions > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full bg-accent-cyan/20 text-accent-cyan text-[10px] font-mono">
-                {governanceStats.total_decisions}
-              </span>
-            )}
-          </button>
-        </div>
+      {/* Main Workspace: Sidebar + Dynamic Tab View */}
+      <div className="flex-1 flex overflow-hidden">
+        <Sidebar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          unacknowledgedAlertsCount={unackAlertsCount}
+          decisionsCount={governanceStats?.total_decisions || 0}
+        />
 
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-accent-cyan/10 border border-accent-cyan/30 text-accent-cyan flex items-center justify-center font-bold text-xs">
-            JD
-          </div>
-        </div>
-      </header>
+        <main className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full overflow-y-auto">
+          {activeTab === 'overview' && (
+            <OverviewTab
+              onSwitchTab={setActiveTab}
+              onExecutePresetQuery={handleExecutePresetQuery}
+              datasetsCount={datasets.length}
+              alertsCount={unackAlertsCount}
+              decisionsCount={governanceStats?.total_decisions || 0}
+              governanceRate={governanceStats?.acceptance_rate_pct || 94.2}
+            />
+          )}
 
-      {/* Main Content Area */}
-      <main className="flex-1 p-8 max-w-7xl mx-auto w-full">
-        {apiError && (
-          <div className="mb-6 p-4 rounded-xl bg-accent-rose/10 border border-accent-rose/30 text-accent-rose text-xs flex items-center gap-3">
-            <AlertCircle className="w-4 h-4" />
-            <span>{apiError}</span>
-          </div>
-        )}
+          {activeTab === 'query' && (
+            <QueryTab
+              initialPrompt={presetQuery}
+              onDecisionLogged={fetchGovernance}
+            />
+          )}
 
-        {/* TAB 1: EXECUTIVE OVERVIEW */}
-        {activeTab === 'overview' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-serif font-bold">Executive Operating Dashboard</h1>
-                <p className="text-neutral-400 text-sm font-light mt-1">
-                  Real-time multi-agent intelligence and enterprise dataset metrics.
-                </p>
-              </div>
-              <button 
-                onClick={() => setActiveTab('query')}
-                className="px-5 py-2.5 rounded-xl bg-accent-cyan text-obsidian-950 font-semibold text-sm flex items-center gap-2 shadow-lg shadow-accent-cyan/20 hover:brightness-110 transition-all"
-              >
-                <Sparkles className="w-4 h-4" /> Ask Executive Query
-              </button>
-            </div>
+          {activeTab === 'ingest' && (
+            <IngestTab
+              datasets={datasets}
+              onRefreshDatasets={fetchDatasets}
+              onDatasetUploaded={fetchDatasets}
+            />
+          )}
 
-            {/* Department Agent Status Cards */}
-            <div className="p-8 rounded-2xl glass-panel border border-white/10">
-              <h2 className="text-xl font-serif font-bold mb-6 flex items-center gap-3">
-                <BrainCircuit className="w-5 h-5 text-accent-cyan" />
-                Active Department AI Agents Status
-              </h2>
+          {activeTab === 'sentinel' && (
+            <SentinelTab
+              alerts={alerts}
+              onRefreshAlerts={fetchAlerts}
+              onAlertAcknowledged={fetchAlerts}
+            />
+          )}
 
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                {['Sales', 'Finance', 'HR', 'Marketing', 'Operations'].map((dept) => (
-                  <div key={dept} className="p-4 rounded-xl bg-obsidian-850 border border-white/5 flex flex-col justify-between">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-sm font-semibold">{dept} Agent</span>
-                      <span className="w-2.5 h-2.5 rounded-full bg-accent-emerald animate-pulse" />
-                    </div>
-                    <div className="text-xs text-neutral-400 font-mono mb-2">Pydantic Standard JSON</div>
-                    <div className="text-[11px] text-accent-emerald bg-accent-emerald/10 px-2 py-0.5 rounded border border-accent-emerald/20 inline-block w-fit">
-                      Status: Active
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        )}
+          {activeTab === 'governance' && (
+            <GovernanceTab
+              stats={governanceStats}
+              decisions={decisionsHistory}
+              onRefresh={fetchGovernance}
+            />
+          )}
+        </main>
+      </div>
 
-        {/* TAB 2: AI COMMAND CENTER */}
-        {activeTab === 'query' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-serif font-bold">AI Executive Command Center</h1>
-                <p className="text-neutral-400 text-sm font-light mt-1">
-                  Execute data-driven multi-agent queries with zero hallucinations and verified evidence.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="px-3 py-1.5 rounded-lg bg-obsidian-850 border border-accent-emerald/30 text-[11px] font-mono text-accent-emerald flex items-center gap-1.5 shadow-sm">
-                  <Sparkles className="w-3 h-3 text-accent-emerald" /> Redis Cache Active
-                </div>
-                {queryResult && (
-                  <button
-                    onClick={handleExportReport}
-                    className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-semibold flex items-center gap-2 transition-all"
-                  >
-                    <Download className="w-3.5 h-3.5 text-accent-cyan" /> Export Executive Report (.PDF)
-                  </button>
-                )}
-              </div>
-            </div>
-
-
-            <form onSubmit={handleExecuteQuery} className="relative">
-              <input
-                type="text"
-                value={queryInput}
-                onChange={(e) => setQueryInput(e.target.value)}
-                placeholder="e.g. What is our total sales revenue and top performing region?"
-                className="w-full px-6 py-5 rounded-2xl glass-panel border border-white/20 text-white placeholder-neutral-500 focus:outline-none focus:border-accent-cyan text-base shadow-2xl pr-36"
-              />
-              <button
-                type="submit"
-                disabled={isExecuting}
-                className="absolute right-3 top-3 bottom-3 px-6 rounded-xl bg-white text-obsidian-950 font-semibold text-sm hover:bg-neutral-200 transition-all flex items-center gap-2 shadow-lg disabled:opacity-50"
-              >
-                {isExecuting ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" /> Reasoning...
-                  </>
-                ) : (
-                  <>
-                    Execute <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </form>
-
-            {/* Query Output Display */}
-            {queryResult && (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-                {/* Elevated Response Validator Confidence Score Banner */}
-                <div className={`p-5 rounded-2xl border flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl ${
-                  queryResult.confidence_score >= 0.90 
-                    ? 'bg-accent-emerald/10 border-accent-emerald/30 text-accent-emerald'
-                    : queryResult.confidence_score >= 0.75
-                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-                    : 'bg-accent-rose/10 border-accent-rose/30 text-accent-rose'
-                }`}>
-                  <div className="flex items-center gap-4">
-                    <div className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center font-bold font-mono shadow-inner ${
-                      queryResult.confidence_score >= 0.90 ? 'bg-accent-emerald/20 text-accent-emerald' : queryResult.confidence_score >= 0.75 ? 'bg-amber-500/20 text-amber-400' : 'bg-accent-rose/20 text-accent-rose'
-                    }`}>
-                      <span className="text-lg leading-tight">{Math.round(queryResult.confidence_score * 100)}%</span>
-                      <span className="text-[9px] font-sans font-medium uppercase tracking-wider">Score</span>
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-sm text-white flex items-center gap-1.5">
-                          <CheckCircle2 className="w-4 h-4 text-accent-emerald" /> Response Validator Confidence
-                        </span>
-                        <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-white/10 text-neutral-200 border border-white/10">
-                          {queryResult.confidence_score >= 0.90 ? 'High Confidence • Grounded' : queryResult.confidence_score >= 0.75 ? 'Moderate Confidence' : 'Low Confidence • Review Required'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-neutral-400 mt-1 font-light">
-                        Verified across {queryResult.evidence_citations?.length || 0} relational SQL assertions & ChromaDB vector embeddings. Zero-hallucination guarantee enforced.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2.5 text-xs font-mono text-neutral-300 bg-obsidian-950/60 px-3.5 py-2 rounded-xl border border-white/10">
-                    <span className="text-neutral-500">Framework:</span>
-                    <span className="px-2 py-0.5 rounded bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/30 font-semibold flex items-center gap-1">
-                      <ShieldCheck className="w-3.5 h-3.5" /> AI-Assisted Governance
-                    </span>
-                  </div>
-                </div>
-
-                {/* Intent & Involved Agents Bar */}
-                <div className="p-4 rounded-xl glass-panel border border-white/10 space-y-3">
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-neutral-300">Detected Intent:</span>
-                      <span className="px-2.5 py-1 rounded bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/30 font-mono">
-                        {queryResult.intent}
-                      </span>
-                    </div>
-                    <div className="text-neutral-400 text-xs font-mono">
-                      Query Execution Latency: <span className="text-white font-bold">&lt; 0.8s</span>
-                    </div>
-                  </div>
-
-                  {/* Involved Agents & View Generated SQL Query Buttons */}
-                  {queryResult.department_outputs && queryResult.department_outputs.length > 0 && (
-                    <div className="pt-2 border-t border-white/5 flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-semibold text-neutral-400 flex items-center gap-1.5 mr-2">
-                        <Users className="w-3.5 h-3.5 text-accent-cyan" /> Involved Department Agents:
-                      </span>
-                      {queryResult.department_outputs.map((out: any, idx: number) => (
-                        <div
-                          key={idx}
-                          className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-obsidian-850 border border-accent-cyan/30 text-xs font-medium text-white shadow-sm"
-                        >
-                          <span className="w-2 h-2 rounded-full bg-accent-emerald animate-pulse" />
-                          <span className="uppercase font-mono text-[11px] text-accent-cyan">{out.department} Agent</span>
-                          <button
-                            onClick={() => setActiveSqlModal(activeSqlModal === out.department ? null : out.department)}
-                            className="ml-1 px-1.5 py-0.5 rounded bg-white/10 hover:bg-accent-cyan/20 text-[10px] text-neutral-300 flex items-center gap-1 transition-all"
-                          >
-                            <Terminal className="w-3 h-3 text-accent-cyan" /> View SQL
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Expanded Raw SQL Inspector Code Box */}
-                {activeSqlModal && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="p-4 rounded-xl bg-obsidian-850 border border-accent-cyan/40 space-y-2">
-                    <div className="flex items-center justify-between text-xs font-mono text-accent-cyan">
-                      <span className="flex items-center gap-2">
-                        <Code className="w-4 h-4" /> Raw SQL Executed by {activeSqlModal.toUpperCase()} Agent
-                      </span>
-                      <button onClick={() => setActiveSqlModal(null)} className="text-neutral-400 hover:text-white">Close</button>
-                    </div>
-                    <pre className="p-3 rounded bg-obsidian-950 border border-white/10 text-xs font-mono text-accent-emerald overflow-x-auto">
-                      {queryResult.department_outputs.find((d: any) => d.department === activeSqlModal)?.sql_executed || '-- SQL Code Logged'}
-                    </pre>
-                  </motion.div>
-                )}
-
-                {/* Structured Executive Intelligence Synthesis Section Cards */}
-                <div className="p-6 rounded-2xl glass-panel border border-white/10 space-y-4">
-                  <h3 className="text-lg font-serif font-bold text-accent-cyan flex items-center gap-2">
-                    <BrainCircuit className="w-5 h-5" /> Executive Intelligence Synthesis
-                  </h3>
-                  {renderFormattedSummary(queryResult.executive_summary)}
-                </div>
-
-                {/* Recharts Chart Visualization */}
-                {queryResult.chart_config && queryResult.chart_config.data && queryResult.chart_config.data.length > 0 && (
-                  <div className="p-6 rounded-2xl glass-panel border border-white/10">
-                    <h3 className="text-sm font-semibold text-neutral-300 mb-4">{queryResult.chart_config.title}</h3>
-                    <div className="h-64 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={queryResult.chart_config.data}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                          <XAxis dataKey="name" stroke="#8A8F98" fontSize={11} />
-                          <YAxis stroke="#8A8F98" fontSize={11} />
-                          <Tooltip contentStyle={{ backgroundColor: '#0E0E12', borderColor: '#2A2A36' }} />
-                          <Bar dataKey="value" fill="#00E5FF" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                )}
-
-                {/* Strategic Recommendations with Explicit Human Accept / Reject Steps */}
-                {queryResult.strategic_recommendations && queryResult.strategic_recommendations.length > 0 && (
-                  <div className="p-6 rounded-2xl glass-panel border border-white/10 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-serif font-bold flex items-center gap-2 text-accent-emerald">
-                        <Sparkles className="w-5 h-5" /> AI-Assisted Strategic Recommendations
-                      </h3>
-                      <span className="text-[11px] font-mono text-neutral-400 bg-obsidian-850 px-2.5 py-1 rounded border border-white/10">
-                        Human-in-the-Loop Approval Required
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {queryResult.strategic_recommendations.map((rec: any, idx: number) => {
-                        const recId = rec.id || `rec_${idx}`;
-                        const decision = recommendationDecisions[recId];
-                        return (
-                          <div 
-                            key={idx} 
-                            className={`p-5 rounded-xl bg-obsidian-850 border transition-all flex flex-col justify-between ${
-                              decision === 'ACCEPTED'
-                                ? 'border-accent-emerald/60 bg-accent-emerald/5 shadow-lg shadow-accent-emerald/10'
-                                : decision === 'REJECTED'
-                                ? 'border-accent-rose/50 bg-accent-rose/5 opacity-70'
-                                : 'border-white/5 hover:border-white/15'
-                            }`}
-                          >
-                            <div>
-                              <div className="flex items-start justify-between mb-2">
-                                <span className="font-semibold text-white text-sm">{rec.title}</span>
-                                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-accent-emerald/10 text-accent-emerald border border-accent-emerald/20 ml-2 whitespace-nowrap">
-                                  {rec.expected_impact}
-                                </span>
-                              </div>
-                              <p className="text-xs text-neutral-300 font-light mb-3">{rec.action_item}</p>
-                              <div className="text-[11px] text-neutral-500 font-mono mb-4">
-                                Evidence: {rec.supporting_evidence[0] || 'Verified via memory engine'}
-                              </div>
-                            </div>
-
-                            {/* Human Decision Action Area */}
-                            <div className="pt-3 border-t border-white/5 flex items-center justify-between gap-3">
-                              {decision ? (
-                                <div className="flex items-center justify-between w-full text-xs font-mono">
-                                  {decision === 'ACCEPTED' ? (
-                                    <span className="text-accent-emerald flex items-center gap-1.5 font-semibold bg-accent-emerald/10 px-3 py-1 rounded-lg border border-accent-emerald/30">
-                                      <Check className="w-3.5 h-3.5" /> Action Plan Accepted by CEO
-                                    </span>
-                                  ) : (
-                                    <span className="text-accent-rose flex items-center gap-1.5 font-semibold bg-accent-rose/10 px-3 py-1 rounded-lg border border-accent-rose/30">
-                                      <X className="w-3.5 h-3.5" /> Recommendation Rejected
-                                    </span>
-                                  )}
-                                  <span className="text-[10px] text-neutral-500">Logged to Audit Trail</span>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2 w-full justify-end">
-                                  <button
-                                    onClick={() => handleRecommendationDecision(rec, 'REJECTED')}
-                                    disabled={isLoggingDecision === recId}
-                                    className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-accent-rose/20 text-neutral-400 hover:text-accent-rose border border-white/10 hover:border-accent-rose/30 text-xs font-medium transition-all flex items-center gap-1.5 disabled:opacity-50"
-                                  >
-                                    <ThumbsDown className="w-3 h-3" /> Reject
-                                  </button>
-                                  <button
-                                    onClick={() => handleRecommendationDecision(rec, 'ACCEPTED')}
-                                    disabled={isLoggingDecision === recId}
-                                    className="px-3.5 py-1.5 rounded-lg bg-accent-emerald/20 hover:bg-accent-emerald/30 text-accent-emerald border border-accent-emerald/40 text-xs font-semibold transition-all flex items-center gap-1.5 shadow-sm hover:shadow-accent-emerald/20 disabled:opacity-50"
-                                  >
-                                    <ThumbsUp className="w-3 h-3" /> Accept Action Plan
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </motion.div>
-            )}
-          </motion.div>
-        )}
-
-        {/* TAB 3: DATA INGESTION & DATASET LIST */}
-        {activeTab === 'ingest' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
-            <div>
-              <h1 className="text-3xl font-serif font-bold">Enterprise Memory Ingestion</h1>
-              <p className="text-neutral-400 text-sm font-light mt-1">
-                Upload CSV department datasets. Automatic schema profiling, KPI extraction, and ChromaDB vector indexing.
-              </p>
-            </div>
-
-            {/* Datasets Active in Enterprise Memory */}
-            <div className="p-6 rounded-2xl glass-panel border border-white/10 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-serif font-bold flex items-center gap-2 text-accent-cyan">
-                  <Database className="w-5 h-5" /> Active Ingested Datasets in Memory ({uploadedDatasets.length})
-                </h2>
-                <button
-                  onClick={fetchDatasets}
-                  className="px-3 py-1.5 rounded-lg bg-obsidian-850 hover:bg-white/10 border border-white/10 text-xs text-neutral-300 transition-all flex items-center gap-1.5"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> Refresh List
-                </button>
-              </div>
-
-              {uploadedDatasets.length === 0 ? (
-                <div className="p-6 rounded-xl bg-obsidian-850/50 border border-white/5 text-center text-xs text-neutral-400">
-                  No uploaded datasets stored in memory yet. Use the upload box below to ingest your CSV datasets.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b border-white/10 text-neutral-400 font-mono uppercase text-[10px]">
-                        <th className="py-3 px-4">Dataset Name</th>
-                        <th className="py-3 px-4">Department Tag</th>
-                        <th className="py-3 px-4">Row Count</th>
-                        <th className="py-3 px-4">Extracted Primary KPI</th>
-                        <th className="py-3 px-4">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {uploadedDatasets.map((ds: any) => (
-                        <tr key={ds.id} className="hover:bg-white/5 transition-colors">
-                          <td className="py-3 px-4 font-semibold text-white flex items-center gap-2">
-                            <FileSpreadsheet className="w-4 h-4 text-accent-cyan" />
-                            {ds.name}
-                          </td>
-                          <td className="py-3 px-4 font-mono uppercase text-accent-emerald">{ds.department}</td>
-                          <td className="py-3 px-4 font-mono">{ds.row_count} rows</td>
-                          <td className="py-3 px-4 text-neutral-300 font-mono">
-                            {ds.schema_info?.kpis_extracted?.primary_metric || 'Analyzed & Profiled'}
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-accent-emerald/10 text-accent-emerald border border-accent-emerald/30 font-semibold text-[10px]">
-                              <span className="w-1.5 h-1.5 rounded-full bg-accent-emerald animate-pulse" /> Indexed & Active
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* Upload Box */}
-            <div className="p-8 rounded-2xl glass-panel border border-white/10 max-w-2xl mx-auto space-y-6">
-              <h2 className="text-lg font-serif font-bold flex items-center gap-2">
-                <UploadCloud className="w-5 h-5 text-accent-cyan" /> Upload New Department Dataset
-              </h2>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase text-neutral-400 mb-2">Target Department</label>
-                <select
-                  value={selectedDept}
-                  onChange={(e) => setSelectedDept(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-obsidian-850 border border-white/15 text-white text-sm focus:outline-none focus:border-accent-cyan"
-                >
-                  <option value="sales">Sales Department</option>
-                  <option value="finance">Finance Department</option>
-                  <option value="hr">HR Department</option>
-                  <option value="marketing">Marketing Department</option>
-                  <option value="operations">Operations Department</option>
-                </select>
-              </div>
-
-              <div className="border-2 border-dashed border-white/15 rounded-2xl p-8 text-center hover:border-accent-cyan/50 transition-all cursor-pointer relative">
-                <UploadCloud className="w-10 h-10 text-accent-cyan mx-auto mb-3" />
-                <p className="text-sm font-medium text-white mb-1">
-                  {fileToUpload ? fileToUpload.name : 'Click or select CSV file to ingest'}
-                </p>
-                <p className="text-xs text-neutral-500">Supports CSV files up to 100MB</p>
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={(e) => setFileToUpload(e.target.files?.[0] || null)}
-                  className="mt-4 text-xs text-neutral-400 mx-auto block cursor-pointer"
-                />
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={handleAnalyzeSchema}
-                  disabled={isUploading}
-                  className="flex-1 py-4 rounded-xl bg-accent-cyan text-obsidian-950 font-bold text-sm hover:bg-accent-cyan/90 transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {isUploading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                  Inspect & Confirm AI Schema Mapping
-                </button>
-                <button
-                  onClick={handleFileUpload}
-                  disabled={isUploading}
-                  className="px-4 py-4 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white font-semibold text-xs transition-all disabled:opacity-50"
-                  title="Direct Upload with Auto-Confirmed Schema"
-                >
-                  Quick Ingest
-                </button>
-              </div>
-
-              {jobProgress && (
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-5 rounded-xl bg-obsidian-850 border border-accent-cyan/40 space-y-3 shadow-xl">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-white flex items-center gap-2 font-mono">
-                      <RefreshCw className="w-3.5 h-3.5 text-accent-cyan animate-spin" />
-                      {jobProgress.stage}
-                    </span>
-                    <span className="font-mono text-accent-cyan font-bold">{jobProgress.progress}%</span>
-                  </div>
-                  <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
-                    <div 
-                      className="bg-gradient-to-r from-accent-cyan to-accent-emerald h-full transition-all duration-300 ease-out" 
-                      style={{ width: `${jobProgress.progress}%` }}
-                    />
-                  </div>
-                  <div className="text-[11px] text-neutral-400 flex items-center justify-between font-mono">
-                    <span>Background Worker Queue: Streaming Ingestion</span>
-                    <span className="text-accent-cyan uppercase">{jobProgress.status}</span>
-                  </div>
-                </motion.div>
-              )}
-
-              {uploadSuccess && (
-                <div className="p-4 rounded-xl bg-accent-emerald/10 border border-accent-emerald/30 text-accent-emerald text-xs flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" /> {uploadSuccess}
-                </div>
-              )}
-
-
-              {/* Interactive AI Schema Intelligence Confirmation Modal */}
-              {schemaProposal && (
-                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-                  <div className="bg-obsidian-900 border border-accent-cyan/30 rounded-2xl p-6 max-w-3xl w-full space-y-5 shadow-2xl overflow-y-auto max-h-[85vh]">
-                    <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                      <div>
-                        <span className="text-xs font-mono uppercase px-2.5 py-0.5 rounded bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/30">
-                          AI Schema Mapping Confirmation
-                        </span>
-                        <h3 className="text-xl font-serif font-bold text-white mt-1">
-                          Verify Column Mapping for {schemaProposal.filename}
-                        </h3>
-                        <p className="text-xs text-neutral-400 mt-0.5">
-                          Department: <span className="uppercase text-accent-emerald font-semibold">{schemaProposal.department}</span> | {schemaProposal.total_columns} Columns Analyzed
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => setSchemaProposal(null)}
-                        className="text-neutral-400 hover:text-white text-sm font-semibold"
-                      >
-                        ✕ Cancel
-                      </button>
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="text-xs text-neutral-300">
-                        Confirm or update the AI-proposed canonical schema field mappings for zero-hallucination execution:
-                      </div>
-
-                      <div className="divide-y divide-white/5 border border-white/10 rounded-xl overflow-hidden bg-obsidian-850">
-                        <div className="grid grid-cols-12 px-4 py-2.5 text-[10px] font-mono uppercase text-neutral-400 bg-white/5">
-                          <div className="col-span-4">CSV Column & Sample</div>
-                          <div className="col-span-3">AI Confidence</div>
-                          <div className="col-span-5">Canonical Target Field</div>
-                        </div>
-
-                        {schemaProposal.proposed_mappings.map((item: any, idx: number) => (
-                          <div key={idx} className="grid grid-cols-12 px-4 py-3 items-center text-xs gap-2">
-                            <div className="col-span-4">
-                              <div className="font-semibold text-white">{item.user_column}</div>
-                              <div className="text-[10px] text-neutral-500 truncate font-mono">
-                                Sample: {item.sample_values.join(', ') || 'N/A'}
-                              </div>
-                            </div>
-                            <div className="col-span-3">
-                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-mono font-semibold ${
-                                item.confidence >= 0.85
-                                  ? 'bg-accent-emerald/10 text-accent-emerald border border-accent-emerald/30'
-                                  : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                              }`}>
-                                {Math.round(item.confidence * 100)}% Match
-                              </span>
-                            </div>
-                            <div className="col-span-5">
-                              <select
-                                value={userMapping[item.user_column] || item.proposed_canonical}
-                                onChange={(e) => setUserMapping({ ...userMapping, [item.user_column]: e.target.value })}
-                                className="w-full px-3 py-1.5 rounded-lg bg-obsidian-950 border border-white/20 text-white text-xs focus:outline-none focus:border-accent-cyan"
-                              >
-                                {item.available_options.map((opt: string) => (
-                                  <option key={opt} value={opt}>
-                                    {opt === 'ignore' ? '🚫 Ignore Column' : `🎯 Mapped to: ${opt}`}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
-                      <button
-                        onClick={() => setSchemaProposal(null)}
-                        className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-semibold"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleConfirmAndIngest}
-                        disabled={isConfirmingSchema}
-                        className="px-6 py-2.5 rounded-xl bg-accent-cyan text-obsidian-950 font-bold text-xs hover:bg-accent-cyan/90 transition-all flex items-center gap-2 shadow-lg disabled:opacity-50"
-                      >
-                        {isConfirmingSchema ? (
-                          <>
-                            <RefreshCw className="w-4 h-4 animate-spin" /> Ingesting Verified Schema...
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="w-4 h-4" /> Confirm & Ingest Verified Schema
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-
-        {/* TAB 4: SENTINEL AI */}
-        {activeTab === 'sentinel' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-serif font-bold flex items-center gap-3">
-                  <Activity className="w-7 h-7 text-accent-rose" /> Sentinel AI Anomaly Center
-                </h1>
-                <p className="text-neutral-400 text-sm font-light mt-1">
-                  Continuous background daemon monitoring metrics and conducting automated root-cause analysis.
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {alerts.length === 0 ? (
-                <div className="p-8 rounded-2xl glass-panel border border-white/10 text-center text-neutral-400 text-sm font-light">
-                  No active anomaly alerts detected yet. Upload CSV datasets to trigger Sentinel AI continuous background analysis.
-                </div>
-              ) : (
-                alerts.map((alert) => (
-                  <div
-                    key={alert.id}
-                    className={`p-6 rounded-2xl glass-panel border transition-all ${
-                      alert.severity === 'HIGH' || alert.severity === 'CRITICAL' ? 'border-accent-rose/40 bg-accent-rose/5' : 'border-white/10'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                          alert.severity === 'HIGH' || alert.severity === 'CRITICAL' ? 'bg-accent-rose/20 text-accent-rose border border-accent-rose/30' : 'bg-accent-amber/20 text-accent-amber border border-accent-amber/30'
-                        }`}>
-                          {alert.severity} SEVERITY
-                        </span>
-                        <span className="text-xs text-neutral-400 font-mono">Target Role: {alert.target_role}</span>
-                      </div>
-                    </div>
-
-                    <h3 className="text-lg font-bold text-white mb-2">{alert.title}</h3>
-                    <p className="text-xs text-neutral-300 mb-3">{alert.description}</p>
-                    
-                    <div className="p-3 rounded-lg bg-obsidian-850 border border-white/5 text-xs text-neutral-400 font-mono">
-                      <span className="text-accent-cyan font-semibold">Root Cause:</span> {alert.root_cause}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </motion.div>
-        )}
-
-        {/* TAB 5: RESPONSIBLE AI GOVERNANCE & AUDIT TRAIL */}
-        {activeTab === 'governance' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-serif font-bold flex items-center gap-3">
-                  <ShieldCheck className="w-7 h-7 text-accent-cyan" /> Responsible AI Governance & Decisions
-                </h1>
-                <p className="text-neutral-400 text-sm font-light mt-1">
-                  Human-in-the-Loop decision audit trail. Review logged executive accept/reject actions on AI recommendations.
-                </p>
-              </div>
-
-              <button
-                onClick={fetchGovernanceStats}
-                className="px-4 py-2 rounded-xl bg-obsidian-850 hover:bg-white/10 border border-white/10 text-xs text-neutral-300 transition-all flex items-center gap-2"
-              >
-                <RefreshCw className="w-3.5 h-3.5" /> Refresh Audit Metrics
-              </button>
-            </div>
-
-            {/* Governance Telemetry Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="p-5 rounded-2xl glass-panel border border-white/10 space-y-2">
-                <div className="text-xs font-mono text-neutral-400 uppercase">Executive Decisions</div>
-                <div className="text-3xl font-bold font-mono text-white">
-                  {governanceStats?.total_decisions || 0}
-                </div>
-                <div className="text-[11px] text-neutral-500">Human-reviewed recommendations</div>
-              </div>
-
-              <div className="p-5 rounded-2xl glass-panel border border-accent-emerald/30 bg-accent-emerald/5 space-y-2">
-                <div className="text-xs font-mono text-accent-emerald uppercase">Acceptance Rate</div>
-                <div className="text-3xl font-bold font-mono text-accent-emerald">
-                  {governanceStats?.acceptance_rate_pct || 0}%
-                </div>
-                <div className="text-[11px] text-neutral-400">Trust alignment index</div>
-              </div>
-
-              <div className="p-5 rounded-2xl glass-panel border border-white/10 space-y-2">
-                <div className="text-xs font-mono text-accent-cyan uppercase">Accepted Action Plans</div>
-                <div className="text-3xl font-bold font-mono text-accent-cyan">
-                  {governanceStats?.accepted_count || 0}
-                </div>
-                <div className="text-[11px] text-neutral-500">Authorized for execution</div>
-              </div>
-
-              <div className="p-5 rounded-2xl glass-panel border border-white/10 space-y-2">
-                <div className="text-xs font-mono text-accent-rose uppercase">Rejected Recommendations</div>
-                <div className="text-3xl font-bold font-mono text-accent-rose">
-                  {governanceStats?.rejected_count || 0}
-                </div>
-                <div className="text-[11px] text-neutral-500">Filtered by executive review</div>
-              </div>
-            </div>
-
-            {/* Department Breakdown Bar */}
-            {governanceStats?.department_breakdown && Object.keys(governanceStats.department_breakdown).length > 0 && (
-              <div className="p-6 rounded-2xl glass-panel border border-white/10 space-y-4">
-                <h3 className="text-base font-serif font-bold text-white flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-accent-cyan" /> Department Governance Distribution
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-                  {Object.entries(governanceStats.department_breakdown).map(([dept, counts]: [string, any]) => (
-                    <div key={dept} className="p-4 rounded-xl bg-obsidian-850 border border-white/5 space-y-2">
-                      <div className="text-xs font-bold uppercase text-accent-cyan font-mono">{dept}</div>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-accent-emerald flex items-center gap-1">
-                          <Check className="w-3 h-3" /> {counts.ACCEPTED || 0}
-                        </span>
-                        <span className="text-accent-rose flex items-center gap-1">
-                          <X className="w-3 h-3" /> {counts.REJECTED || 0}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Decision Audit Log Table */}
-            <div className="p-6 rounded-2xl glass-panel border border-white/10 space-y-4">
-              <h3 className="text-base font-serif font-bold text-white flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4 text-accent-emerald" /> Decision Audit Trail ({decisionsHistory.length})
-              </h3>
-
-              {decisionsHistory.length === 0 ? (
-                <div className="p-8 rounded-xl bg-obsidian-850/50 border border-white/5 text-center text-xs text-neutral-400 font-light">
-                  No decisions logged yet. Execute an AI Command Center query and click &quot;Accept Action Plan&quot; or &quot;Reject&quot; on any recommendation.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b border-white/10 text-neutral-400 font-mono uppercase text-[10px]">
-                        <th className="py-3 px-4">Timestamp</th>
-                        <th className="py-3 px-4">Executive Actor</th>
-                        <th className="py-3 px-4">Department</th>
-                        <th className="py-3 px-4">Decision Action</th>
-                        <th className="py-3 px-4">Recommendation Title</th>
-                        <th className="py-3 px-4">Confidence</th>
-                        <th className="py-3 px-4">Audit Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {decisionsHistory.map((d: any) => (
-                        <tr key={d.id} className="hover:bg-white/5 transition-colors">
-                          <td className="py-3 px-4 font-mono text-neutral-400 text-[11px]">
-                            {new Date(d.created_at).toLocaleString()}
-                          </td>
-                          <td className="py-3 px-4 font-semibold text-white">CEO (Jane Doe)</td>
-                          <td className="py-3 px-4 uppercase font-mono text-accent-cyan text-[11px]">{d.department}</td>
-                          <td className="py-3 px-4">
-                            <span className={`px-2.5 py-0.5 rounded font-mono text-[10px] font-bold ${
-                              d.action_type === 'ACCEPTED'
-                                ? 'bg-accent-emerald/20 text-accent-emerald border border-accent-emerald/30'
-                                : 'bg-accent-rose/20 text-accent-rose border border-accent-rose/30'
-                            }`}>
-                              {d.action_type}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-neutral-200 font-medium max-w-xs truncate">{d.recommendation_title}</td>
-                          <td className="py-3 px-4 font-mono text-accent-emerald">
-                            {Math.round(d.confidence_score * 100)}%
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className="text-[10px] font-mono text-neutral-400 flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3 text-accent-emerald" /> Logged &amp; Verified
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </main>
+      {/* Global Command Palette (Ctrl+K) */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onSelectTab={setActiveTab}
+        onExecutePresetQuery={handleExecutePresetQuery}
+        onTriggerSentinelScan={handleTriggerSentinelScan}
+      />
     </div>
   );
 }
