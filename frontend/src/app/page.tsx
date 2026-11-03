@@ -20,8 +20,12 @@ import {
   BarChart3,
   Bot
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 export default function LandingPage() {
+  const { isAuthenticated } = useAuth();
+  const entryRoute = isAuthenticated ? '/dashboard' : '/login';
+
   return (
     <div className="relative min-h-screen bg-obsidian-900 text-white overflow-hidden scroll-smooth font-sans selection:bg-accent-cyan/30 selection:text-accent-cyan">
       {/* Dynamic Background Glow */}
@@ -59,7 +63,7 @@ export default function LandingPage() {
             Register
           </Link>
           <Link 
-            href="/dashboard" 
+            href={entryRoute} 
             className="px-4 py-2 rounded-lg font-semibold text-xs bg-white text-obsidian-950 hover:bg-neutral-200 transition-all shadow-lg hover:shadow-white/20 flex items-center gap-1.5 group"
           >
             Launch Platform
@@ -108,7 +112,7 @@ export default function LandingPage() {
           className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16"
         >
           <Link 
-            href="/dashboard"
+            href={entryRoute}
             className="w-full sm:w-auto px-8 py-4 rounded-xl bg-white text-obsidian-950 font-semibold text-base shadow-xl shadow-white/10 hover:bg-neutral-100 transition-all flex items-center justify-center gap-3"
           >
             Enter Executive Dashboard
