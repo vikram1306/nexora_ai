@@ -43,7 +43,6 @@ export default function LandingPage() {
           <a href="#features" className="hover:text-white transition-colors">Features</a>
           <a href="#architecture" className="hover:text-white transition-colors">Architecture</a>
           <a href="#sentinel" className="hover:text-white transition-colors">Sentinel AI</a>
-          <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
         </nav>
 
         <div className="flex items-center gap-3">
@@ -286,73 +285,6 @@ export default function LandingPage() {
             <div className="p-3 rounded-lg bg-obsidian-850 text-xs font-mono text-neutral-400">
               <span className="text-accent-cyan font-semibold">Root Cause:</span> Meta Ad Campaign spend increased without proportional conversion lift.
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* SECTION 4: ENTERPRISE PRICING TIERS */}
-      <section id="pricing" className="py-24 px-6 max-w-6xl mx-auto border-t border-white/10">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-5xl font-serif mb-4">Enterprise SaaS Subscription Tiers</h2>
-          <p className="text-neutral-400 max-w-2xl mx-auto font-light">
-            Deploy local open-source AI operating infrastructure tailored to your enterprise dataset volume.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Tier 1 */}
-          <div className="p-8 rounded-2xl glass-panel border border-white/10 space-y-6">
-            <div>
-              <h3 className="text-xl font-bold mb-2">Growth Tier</h3>
-              <p className="text-xs text-neutral-400 font-light">For scaling companies uploading up to 10 department CSVs.</p>
-            </div>
-            <div className="text-4xl font-serif font-bold">$499 <span className="text-xs text-neutral-400 font-sans font-normal">/ month</span></div>
-            <ul className="space-y-3 text-xs text-neutral-300 font-light">
-              <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-accent-emerald" /> 5 Department Agents</li>
-              <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-accent-emerald" /> Enterprise Memory (PostgreSQL + ChromaDB)</li>
-              <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-accent-emerald" /> Response Validator Confidence Scoring</li>
-            </ul>
-            <Link href="/register" className="block text-center w-full py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition-all">
-              Start Free Trial
-            </Link>
-          </div>
-
-          {/* Tier 2 */}
-          <div className="p-8 rounded-2xl glass-panel border border-accent-cyan/40 bg-accent-cyan/5 space-y-6 relative">
-            <div className="absolute -top-3 right-6 px-3 py-0.5 rounded-full bg-accent-cyan text-obsidian-950 font-bold text-[10px] uppercase">
-              Most Popular
-            </div>
-            <div>
-              <h3 className="text-xl font-bold mb-2 text-accent-cyan">Enterprise Intelligence</h3>
-              <p className="text-xs text-neutral-400 font-light">Full continuous Sentinel AI monitoring and executive recommendations.</p>
-            </div>
-            <div className="text-4xl font-serif font-bold">$1,499 <span className="text-xs text-neutral-400 font-sans font-normal">/ month</span></div>
-            <ul className="space-y-3 text-xs text-neutral-300 font-light">
-              <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-accent-cyan" /> Unlimited CSV Memory Ingestion</li>
-              <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-accent-cyan" /> Sentinel AI Anomaly Daemon</li>
-              <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-accent-cyan" /> Multi-Tier Alerts (Employee to CEO)</li>
-              <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-accent-cyan" /> Strategic Intelligence Recommendation Engine</li>
-            </ul>
-            <Link href="/register" className="block text-center w-full py-3 rounded-xl bg-accent-cyan text-obsidian-950 font-semibold text-xs transition-all hover:brightness-110 shadow-lg shadow-accent-cyan/20">
-              Launch Enterprise OS
-            </Link>
-          </div>
-
-          {/* Tier 3 */}
-          <div className="p-8 rounded-2xl glass-panel border border-white/10 space-y-6">
-            <div>
-              <h3 className="text-xl font-bold mb-2">Private Air-Gapped</h3>
-              <p className="text-xs text-neutral-400 font-light">For banking, healthcare, and government requiring on-premise hardware.</p>
-            </div>
-            <div className="text-4xl font-serif font-bold">Custom</div>
-            <ul className="space-y-3 text-xs text-neutral-300 font-light">
-              <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-accent-emerald" /> On-Premise GPU Containerization</li>
-              <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-accent-emerald" /> Custom Open-Source LLM Fine-Tuning</li>
-              <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-accent-emerald" /> 24/7 Dedicated Solutions Architect</li>
-            </ul>
-            <Link href="/login" className="block text-center w-full py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition-all">
-              Sign In to Private Portal
-            </Link>
           </div>
         </div>
       </section>
