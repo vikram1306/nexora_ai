@@ -237,7 +237,7 @@ export function Sidebar({
                   {user?.full_name || 'Executive User'}
                 </div>
                 <div className="text-[10px] text-neutral-400 font-mono truncate">
-                  {user?.email || 'user@acme.com'}
+                  {user?.email || 'Logged In'}
                 </div>
               </div>
             )}
@@ -245,7 +245,7 @@ export function Sidebar({
 
           <button
             onClick={logout}
-            title="Log Out"
+            title="Log Out (Clear Session)"
             className="p-1.5 rounded-lg text-neutral-400 hover:text-accent-rose hover:bg-accent-rose/10 transition-colors flex-shrink-0"
           >
             <LogOut className="w-4 h-4" />
@@ -255,4 +255,3 @@ export function Sidebar({
     </aside>
   );
 }
-

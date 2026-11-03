@@ -63,7 +63,7 @@ export function Header({
         <div className="hidden sm:flex items-center gap-2 text-xs font-mono text-neutral-300 bg-obsidian-850 px-3 py-1.5 rounded-lg border border-white/5">
           <Building className="w-3.5 h-3.5 text-accent-cyan" />
           <span className="font-semibold text-white">
-            {user?.tenant?.name || 'Acme Global Enterprise'}
+            {user?.tenant?.name || 'Workspace'}
           </span>
           <span className="text-neutral-500">•</span>
           <span className="text-accent-emerald font-semibold uppercase text-[10px] px-1.5 py-0.5 rounded bg-accent-emerald/10 border border-accent-emerald/20">
@@ -170,8 +170,8 @@ export function Header({
 
           <button
             onClick={logout}
-            title="Sign Out"
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-accent-rose hover:bg-accent-rose/10 transition-colors"
+            title="Log Out (Clear Session)"
+            className="p-1.5 rounded-lg text-neutral-400 hover:text-accent-rose hover:bg-accent-rose/10 transition-colors flex-shrink-0"
           >
             <LogOut className="w-4 h-4" />
           </button>
@@ -180,4 +180,3 @@ export function Header({
     </header>
   );
 }
-

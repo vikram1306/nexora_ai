@@ -148,7 +148,7 @@ function LoginFormContent() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="executive@acme.com"
+              placeholder="you@company.com"
               required
               className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-obsidian-850 border border-white/10 text-white placeholder-neutral-500 text-sm focus:outline-none focus:border-accent-cyan/60 transition-all font-sans"
             />

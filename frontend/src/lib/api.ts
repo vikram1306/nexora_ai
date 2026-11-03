@@ -22,6 +22,11 @@ export const clearToken = (): void => {
   if (typeof window === 'undefined') return;
   localStorage.removeItem('nexora_token');
   localStorage.removeItem('nexora_user');
+  try {
+    localStorage.clear();
+  } catch (e) {
+    // ignore
+  }
 };
 
 export const getUser = (): any | null => {
@@ -363,4 +368,3 @@ export const healthApi = {
       uptime_seconds: number;
     }>('/health'),
 };
-
